@@ -9,9 +9,9 @@ const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 // Recommended ElevenLabs voice IDs for each faction
 // Users can customize these in settings
 const DEFAULT_VOICE_IDS = {
-    zerg: 'onwK4e9ZLuTAKqWW03F9', // Deep, menacing voice (Daniel)
-    human: 'qXpMhyvQqiRxWQs4qSSB', // Military voice (user-selected)
-    protoss: 'EXAVITQu4vr4xnSDxMaL' // Ethereal, wise voice (Bella)
+    zerg: 'HH3kybY6uEJ2ebSa9Vy3', // User-selected Zerg voice
+    human: 'qXpMhyvQqiRxWQs4qSSB', // User-selected Human voice
+    protoss: 'flHkNRp1BlvT73UL6gyz' // User-selected Protoss voice
 };
 
 // Voice settings per faction for optimal effect
