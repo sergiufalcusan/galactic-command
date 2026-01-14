@@ -45,6 +45,8 @@ export class GameActions {
         // Get building configuration
         switch (buildingType) {
             case 'supply':
+            case 'supplydepot':
+            case 'pylon':
             case 'overlord':
                 // Zerg uses Overlords (units) while other factions use buildings
                 if (faction.id === 'zerg') {
@@ -59,6 +61,8 @@ export class GameActions {
                 break;
 
             case 'barracks':
+            case 'spawningpool':
+            case 'gateway':
                 buildingConfig = faction.buildings.barracks;
                 const barracksCount = gameState.getBuildingsByType('barracks').length;
                 placement.x = -15 - barracksCount * 5;
@@ -66,13 +70,18 @@ export class GameActions {
                 break;
 
             case 'factory':
+            case 'roachwarren':
+            case 'roboticsfacility':
                 buildingConfig = faction.buildings.factory;
                 const factoryCount = gameState.getBuildingsByType('factory').length;
                 placement.x = -15 - factoryCount * 5;
                 placement.z = -5;
                 break;
 
-            case 'gasExtractor':
+            case 'gasextractor':
+            case 'extractor':
+            case 'refinery':
+            case 'assimilator':
                 buildingConfig = faction.buildings.gasExtractor;
                 // Find an empty geyser
                 const availableGeyser = gameState.gasGeysers.find(g => !g.hasExtractor);

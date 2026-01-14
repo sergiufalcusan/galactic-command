@@ -19,6 +19,7 @@ export class BuildingRenderer {
     }
 
     createBuilding(buildingData) {
+        console.log('[BuildingRenderer] createBuilding:', buildingData);
         let building;
 
         switch (buildingData.type) {

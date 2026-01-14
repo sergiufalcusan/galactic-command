@@ -302,6 +302,7 @@ class Game {
     }
 
     onBuildingCreated(building) {
+        console.log('[Game] onBuildingCreated called:', building);
         this.buildingRenderer.createBuilding(building);
     }
 
