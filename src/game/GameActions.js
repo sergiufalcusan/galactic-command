@@ -45,6 +45,12 @@ export class GameActions {
         // Get building configuration
         switch (buildingType) {
             case 'supply':
+            case 'overlord':
+                // Zerg uses Overlords (units) while other factions use buildings
+                if (faction.id === 'zerg') {
+                    // Spawn Overlord as a unit
+                    return this.produceOverlord();
+                }
                 buildingConfig = faction.buildings.supply || faction.supplyUnit;
                 // Place supply buildings in a grid pattern
                 const supplyCount = gameState.getBuildingsByType('supply').length;
@@ -172,6 +178,37 @@ export class GameActions {
 
         result.success = true;
         result.message = `Training ${unitConfig.name}`;
+        return result;
+    }
+
+    produceOverlord() {
+        const result = { success: false, message: '' };
+        const faction = gameState.faction;
+        const overlordConfig = faction.supplyUnit;
+
+        // Check resources
+        if (!gameState.canAfford(overlordConfig.cost)) {
+            result.message = `Not enough resources. Need ${overlordConfig.cost.minerals} minerals`;
+            return result;
+        }
+
+        // Spend resources
+        gameState.spendResources(overlordConfig.cost);
+
+        // Add to production queue as a special supply unit
+        gameState.addToProductionQueue({
+            category: 'unit',
+            unitType: 'overlord',
+            name: overlordConfig.name,
+            buildTime: overlordConfig.buildTime,
+            population: 0, // Overlords don't cost supply
+            health: 200,
+            isSupplyUnit: true,
+            supplyProvided: overlordConfig.supplyProvided
+        });
+
+        result.success = true;
+        result.message = `Spawning ${overlordConfig.name}`;
         return result;
     }
 

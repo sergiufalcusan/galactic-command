@@ -342,10 +342,19 @@ class GameState {
                 z: spawnZ,
                 health: item.health || 100,
                 maxHealth: item.health || 100,
-                state: 'idle'
+                state: 'idle',
+                isSupplyUnit: item.isSupplyUnit || false
             });
 
-            this.population += item.population || 1;
+            // Handle supply units (Overlord) - increase population cap
+            if (item.isSupplyUnit && item.supplyProvided) {
+                this.populationMax = Math.min(
+                    this.populationMax + item.supplyProvided,
+                    MAX_POPULATION
+                );
+            } else {
+                this.population += item.population || 1;
+            }
         } else if (item.category === 'building') {
             const building = this.buildings.find(b => b.id === item.buildingId);
             if (building) {
