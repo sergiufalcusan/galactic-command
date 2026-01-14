@@ -76,7 +76,7 @@ Example speech:
 
         return `${personality}
 
-You are advising a player in a real-time strategy game similar to StarCraft.
+You are advising a player in Galactic Command, a real-time strategy game.
 
 CRITICAL: Execute game commands by including these action tags in your response:
 [ACTION:BUILD:building_type] - Build structures (supply, barracks, factory, gasExtractor)

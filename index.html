@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="A StarCraft-inspired browser strategy game with AI advisors">
+  <meta name="description" content="Galactic Command - Browser-based real-time strategy game with AI advisors">
   <title>Galactic Command - Strategy Game</title>
   <link rel="stylesheet" href="/src/styles/index.css">
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
 </head>
+
 <body>
   <div id="app">
     <!-- Main Menu Screen -->
@@ -81,7 +85,7 @@
     <div id="game-screen" class="screen">
       <!-- Three.js Canvas Container -->
       <div id="game-canvas-container"></div>
-      
+
       <!-- HUD Overlay -->
       <div id="hud">
         <div class="hud-top">
@@ -107,12 +111,12 @@
             <button id="btn-game-menu" class="hud-btn" title="Menu">☰</button>
           </div>
         </div>
-        
+
         <!-- Minimap -->
         <div id="minimap">
           <canvas id="minimap-canvas"></canvas>
         </div>
-        
+
         <!-- Selection Panel -->
         <div id="selection-panel">
           <div id="selected-info">
@@ -121,7 +125,7 @@
           <div id="action-buttons"></div>
         </div>
       </div>
-      
+
       <!-- Chat Interface -->
       <div id="chat-container">
         <div id="chat-header">
@@ -136,7 +140,8 @@
       </div>
     </div>
   </div>
-  
+
   <script type="module" src="/src/main.js"></script>
 </body>
+
 </html>

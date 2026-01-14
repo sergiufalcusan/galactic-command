@@ -1,6 +1,6 @@
 /**
  * Galactic Command - Main Entry Point
- * StarCraft-inspired browser strategy game with AI advisors
+ * Browser-based real-time strategy game with AI advisors
  */
 
 import gameState from './game/GameState.js';
