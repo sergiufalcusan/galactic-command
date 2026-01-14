@@ -324,19 +324,112 @@ export class BuildingRenderer {
     createConstructionOverlay(data) {
         const group = new THREE.Group();
 
-        // Wireframe effect
+        // Wireframe scaffolding effect
         const wireGeometry = new THREE.BoxGeometry(5, 4, 5);
         const wireMaterial = new THREE.MeshBasicMaterial({
             color: 0x00ff00,
             wireframe: true,
             transparent: true,
-            opacity: 0.5
+            opacity: 0.6
         });
         const wire = new THREE.Mesh(wireGeometry, wireMaterial);
         wire.position.y = 2;
         group.add(wire);
 
+        // Progress bar background
+        const barBgGeometry = new THREE.PlaneGeometry(4, 0.3);
+        const barBgMaterial = new THREE.MeshBasicMaterial({
+            color: 0x333333,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide
+        });
+        const barBg = new THREE.Mesh(barBgGeometry, barBgMaterial);
+        barBg.position.set(0, 5, 0);
+        barBg.lookAt(new THREE.Vector3(0, 5, 10)); // Face camera roughly
+        group.add(barBg);
+
+        // Progress bar fill
+        const barFillGeometry = new THREE.PlaneGeometry(3.9, 0.25);
+        const barFillMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ff00,
+            transparent: true,
+            opacity: 0.9,
+            side: THREE.DoubleSide
+        });
+        const barFill = new THREE.Mesh(barFillGeometry, barFillMaterial);
+        barFill.position.set(0, 5, 0.01);
+        barFill.scale.x = 0.01; // Start empty
+        barFill.userData.isProgressBar = true;
+        group.add(barFill);
+
+        // Timer text using canvas texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#00ff00';
+        ctx.font = 'bold 32px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('--:--', 64, 40);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const timerMaterial = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true
+        });
+        const timerSprite = new THREE.Sprite(timerMaterial);
+        timerSprite.position.set(0, 6, 0);
+        timerSprite.scale.set(2, 1, 1);
+        timerSprite.userData.isTimer = true;
+        timerSprite.userData.canvas = canvas;
+        timerSprite.userData.texture = texture;
+        group.add(timerSprite);
+
         return group;
+    }
+
+    updateConstructionProgress(buildingId, progress, remainingTime) {
+        const building = this.buildings.get(buildingId);
+        if (building && building.userData.constructionOverlay) {
+            const overlay = building.userData.constructionOverlay;
+
+            overlay.children.forEach(child => {
+                // Update progress bar
+                if (child.userData?.isProgressBar) {
+                    child.scale.x = Math.max(0.01, progress);
+                    child.position.x = -1.95 + (progress * 1.95); // Slide from left
+                }
+
+                // Update timer text
+                if (child.userData?.isTimer) {
+                    const canvas = child.userData.canvas;
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#00ff00';
+                    ctx.font = 'bold 32px monospace';
+                    ctx.textAlign = 'center';
+
+                    const seconds = Math.ceil(remainingTime);
+                    const mins = Math.floor(seconds / 60);
+                    const secs = seconds % 60;
+                    const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+                    ctx.fillText(timeStr, 64, 40);
+
+                    child.userData.texture.needsUpdate = true;
+                }
+            });
+
+            // Adjust building opacity based on progress
+            building.children.forEach(child => {
+                if (child !== overlay && child.material) {
+                    if (child.material.transparent === undefined) {
+                        child.material.transparent = true;
+                    }
+                    child.material.opacity = 0.3 + (progress * 0.7);
+                }
+            });
+        }
     }
 
     completeConstruction(buildingId) {

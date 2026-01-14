@@ -363,11 +363,29 @@ class Game {
         // Update HUD
         this.hud?.update();
 
+        // Update construction progress visuals
+        this.updateBuildingConstruction();
+
         // Update unit positions for workers
         this.updateWorkerPositions(deltaTime);
 
         // Update Three.js controls
         this.scene?.update();
+    }
+
+    updateBuildingConstruction() {
+        // Update progress bars and timers for buildings under construction
+        gameState.productionQueue.forEach(item => {
+            if (item.category === 'building' && item.buildingId) {
+                const progress = item.progress / item.buildTime;
+                const remaining = item.buildTime - item.progress;
+                this.buildingRenderer?.updateConstructionProgress(
+                    item.buildingId,
+                    progress,
+                    remaining
+                );
+            }
+        });
     }
 
     updateWorkerPositions(deltaTime) {
