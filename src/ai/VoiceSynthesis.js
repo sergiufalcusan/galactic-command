@@ -10,7 +10,7 @@ const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 // Users can customize these in settings
 const DEFAULT_VOICE_IDS = {
     zerg: 'onwK4e9ZLuTAKqWW03F9', // Deep, menacing voice (Daniel)
-    human: 'pNInz6obpgDQGcFmaJgB', // Military male voice (Adam)
+    human: 'qXpMhyvQqiRxWQs4qSSB', // Military voice (user-selected)
     protoss: 'EXAVITQu4vr4xnSDxMaL' // Ethereal, wise voice (Bella)
 };
 
