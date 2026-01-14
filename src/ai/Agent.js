@@ -287,13 +287,16 @@ Current game state:
 
     parseActions(text) {
         const actions = [];
-        const actionRegex = /\[ACTION:(\w+):?(\w*)\]/g;
+        // Match [ACTION:TYPE:target] with any characters including spaces
+        const actionRegex = /\[ACTION:([A-Z_]+):?([^\]]*)\]/gi;
         let match;
 
         while ((match = actionRegex.exec(text)) !== null) {
+            // Normalize target to lowercase without spaces for matching
+            const target = match[2] ? match[2].trim().toLowerCase().replace(/\s+/g, '') : null;
             actions.push({
-                type: match[1],
-                target: match[2] || null
+                type: match[1].toUpperCase(),
+                target: target
             });
         }
 
@@ -301,8 +304,8 @@ Current game state:
     }
 
     cleanResponseText(text) {
-        // Remove action commands from displayed text
-        return text.replace(/\[ACTION:\w+:?\w*\]/g, '').trim();
+        // Remove action commands from displayed text (handles any format)
+        return text.replace(/\[ACTION:[^\]]+\]/gi, '').trim();
     }
 
     executeActions(actions) {
