@@ -368,13 +368,15 @@ class GameState {
                     );
                 }
 
-                // Handle gas extractors
-                if (item.type === 'gasExtractor') {
+                // Handle gas extractors (check all aliases)
+                const gasTypes = ['gasextractor', 'extractor', 'refinery', 'assimilator'];
+                if (gasTypes.includes(item.type?.toLowerCase())) {
                     const geyser = this.gasGeysers.find(g =>
                         Math.abs(g.x - building.x) < 2 && Math.abs(g.z - building.z) < 2
                     );
                     if (geyser) {
                         geyser.hasExtractor = true;
+                        console.log('[GameState] Gas extractor complete, geyser enabled:', geyser.id);
                     }
                 }
             }
