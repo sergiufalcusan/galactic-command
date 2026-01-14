@@ -81,8 +81,8 @@ You are advising a player in Galactic Command, a real-time strategy game.
 CRITICAL: Execute game commands by including these action tags in your response:
 [ACTION:BUILD:building_type] - Build structures (supply, barracks, factory, gasExtractor)
 [ACTION:PRODUCE:unit_type] - Produce units (worker, ${Object.keys(factionInfo.units || {}).join(', ')})
-[ACTION:MINE] - Assign workers to minerals
-[ACTION:HARVEST_GAS] - Assign workers to gas
+[ACTION:MINE:count] - Assign workers to minerals (count optional, e.g. [ACTION:MINE:3])
+[ACTION:HARVEST_GAS:count] - Assign workers to gas (count optional, e.g. [ACTION:HARVEST_GAS:2])
 
 Faction: ${factionInfo.name}
 Worker: ${factionInfo.worker.name} (${factionInfo.worker.cost.minerals} minerals)

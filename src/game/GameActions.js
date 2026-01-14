@@ -13,6 +13,7 @@ export class GameActions {
 
     executeAction(action) {
         const result = { success: false, message: '' };
+        const count = action.target ? parseInt(action.target, 10) : null;
 
         switch (action.type) {
             case 'BUILD':
@@ -20,9 +21,9 @@ export class GameActions {
             case 'PRODUCE':
                 return this.produceUnit(action.target);
             case 'MINE':
-                return this.assignMining();
+                return this.assignMining(count);
             case 'HARVEST_GAS':
-                return this.assignGasHarvesting();
+                return this.assignGasHarvesting(count);
             default:
                 result.message = `Unknown action: ${action.type}`;
                 return result;
@@ -174,7 +175,7 @@ export class GameActions {
         return result;
     }
 
-    assignMining() {
+    assignMining(count = null) {
         const result = { success: false, message: '' };
         const idleWorkers = gameState.getIdleWorkers();
 
@@ -183,8 +184,11 @@ export class GameActions {
             return result;
         }
 
+        // Limit to count if specified
+        const workersToAssign = count ? idleWorkers.slice(0, count) : idleWorkers;
         let assigned = 0;
-        idleWorkers.forEach(worker => {
+
+        workersToAssign.forEach(worker => {
             if (gameState.assignWorkerToMinerals(worker.id)) {
                 assigned++;
             }
@@ -195,9 +199,11 @@ export class GameActions {
         return result;
     }
 
-    assignGasHarvesting() {
+    assignGasHarvesting(count = null) {
         const result = { success: false, message: '' };
-        const idleWorkers = gameState.getIdleWorkers();
+
+        // Determine how many workers to assign (default 3)
+        const targetCount = count || 3;
 
         // Check if we have a gas extractor
         const hasExtractor = gameState.gasGeysers.some(g => g.hasExtractor);
@@ -206,17 +212,42 @@ export class GameActions {
             return result;
         }
 
-        if (idleWorkers.length === 0) {
-            result.message = 'No idle workers available';
+        // First try idle workers
+        let availableWorkers = gameState.getIdleWorkers();
+
+        // If not enough idle workers, pull from mineral workers
+        if (availableWorkers.length < targetCount && gameState.mineralWorkers.length > 0) {
+            const needed = targetCount - availableWorkers.length;
+            // Get workers currently mining
+            const miningWorkerIds = gameState.mineralWorkers.slice(0, needed);
+            const miningWorkers = miningWorkerIds.map(id =>
+                gameState.units.find(u => u.id === id)
+            ).filter(Boolean);
+
+            // Remove them from mineral workers and make idle
+            miningWorkerIds.forEach(id => {
+                gameState.mineralWorkers = gameState.mineralWorkers.filter(wid => wid !== id);
+                const worker = gameState.units.find(u => u.id === id);
+                if (worker) {
+                    worker.state = 'idle';
+                    worker.targetResource = null;
+                }
+            });
+
+            availableWorkers = [...availableWorkers, ...miningWorkers];
+        }
+
+        if (availableWorkers.length === 0) {
+            result.message = 'No workers available';
             return result;
         }
 
-        // Assign up to 3 workers per geyser
-        const gasWorkersNeeded = 3 - gameState.gasWorkers.length;
+        // Limit to requested count and available gas slots
+        const gasWorkersNeeded = Math.min(targetCount, 3 - gameState.gasWorkers.length);
         let assigned = 0;
 
-        for (let i = 0; i < Math.min(gasWorkersNeeded, idleWorkers.length); i++) {
-            if (gameState.assignWorkerToGas(idleWorkers[i].id)) {
+        for (let i = 0; i < Math.min(gasWorkersNeeded, availableWorkers.length); i++) {
+            if (gameState.assignWorkerToGas(availableWorkers[i].id)) {
                 assigned++;
             }
         }
@@ -224,7 +255,7 @@ export class GameActions {
         result.success = assigned > 0;
         result.message = assigned > 0
             ? `Assigned ${assigned} workers to harvest gas`
-            : 'Gas workers slots are full';
+            : 'Gas workers slots are full (max 3)';
         return result;
     }
 }
