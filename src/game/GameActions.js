@@ -83,8 +83,20 @@ export class GameActions {
             case 'refinery':
             case 'assimilator':
                 buildingConfig = faction.buildings.gasExtractor;
-                // Find an empty geyser
-                const availableGeyser = gameState.gasGeysers.find(g => !g.hasExtractor);
+                // Find a geyser without extractor AND not already building
+                const occupiedGeysers = gameState.buildings
+                    .filter(b => ['gasextractor', 'extractor', 'refinery', 'assimilator'].includes(b.type?.toLowerCase()))
+                    .map(b => ({ x: b.x, z: b.z }));
+
+                const availableGeyser = gameState.gasGeysers.find(g => {
+                    if (g.hasExtractor) return false;
+                    // Check if already building on this geyser
+                    const isOccupied = occupiedGeysers.some(
+                        b => Math.abs(b.x - g.x) < 2 && Math.abs(b.z - g.z) < 2
+                    );
+                    return !isOccupied;
+                });
+
                 if (!availableGeyser) {
                     result.message = 'No available gas geysers';
                     return result;
@@ -149,10 +161,22 @@ export class GameActions {
 
         let unitConfig;
 
-        if (unitType === 'worker') {
+        // Normalize unit type aliases
+        const unitTypeMap = {
+            'worker': 'worker',
+            'scv': 'worker',
+            'drone': 'worker',
+            'probe': 'worker',
+            'marine': 'marine',
+            'zergling': 'zergling',
+            'zealot': 'zealot'
+        };
+        const normalizedType = unitTypeMap[unitType] || unitType;
+
+        if (normalizedType === 'worker') {
             unitConfig = faction.worker;
-        } else if (faction.units[unitType]) {
-            unitConfig = faction.units[unitType];
+        } else if (faction.units[normalizedType]) {
+            unitConfig = faction.units[normalizedType];
         } else {
             result.message = `Unknown unit type: ${unitType}`;
             return result;
@@ -178,7 +202,7 @@ export class GameActions {
         // Add to production queue
         gameState.addToProductionQueue({
             category: 'unit',
-            unitType: unitType,
+            unitType: normalizedType,
             name: unitConfig.name,
             buildTime: unitConfig.buildTime,
             population: populationCost,
