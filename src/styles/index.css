@@ -1,0 +1,850 @@
+/* ========================================
+   GALACTIC COMMAND - Game Styles
+   ======================================== */
+
+/* CSS Variables */
+:root {
+  /* Core colors */
+  --bg-dark: #0a0a0f;
+  --bg-darker: #050508;
+  --bg-panel: rgba(15, 20, 35, 0.95);
+  --bg-panel-hover: rgba(25, 35, 55, 0.95);
+  
+  /* Accent colors */
+  --accent-primary: #00d4ff;
+  --accent-secondary: #7b2dff;
+  --accent-gold: #ffd700;
+  --accent-success: #00ff88;
+  --accent-warning: #ff8800;
+  --accent-danger: #ff3366;
+  
+  /* Faction colors */
+  --zerg-primary: #8b00ff;
+  --zerg-secondary: #4a0080;
+  --zerg-glow: rgba(139, 0, 255, 0.5);
+  
+  --human-primary: #00aaff;
+  --human-secondary: #004488;
+  --human-glow: rgba(0, 170, 255, 0.5);
+  
+  --protoss-primary: #ffcc00;
+  --protoss-secondary: #886600;
+  --protoss-glow: rgba(255, 204, 0, 0.5);
+  
+  /* Text colors */
+  --text-primary: #ffffff;
+  --text-secondary: #a0a8b8;
+  --text-muted: #5a6070;
+  
+  /* Borders */
+  --border-color: rgba(100, 120, 160, 0.3);
+  --border-glow: rgba(0, 212, 255, 0.5);
+  
+  /* Typography */
+  --font-display: 'Orbitron', sans-serif;
+  --font-body: 'Rajdhani', sans-serif;
+  
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* Animation */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+}
+
+/* Reset & Base */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* ========================================
+   SCREENS
+   ======================================== */
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+}
+
+.screen.active {
+  display: flex;
+  opacity: 1;
+}
+
+/* ========================================
+   MAIN MENU
+   ======================================== */
+#main-menu {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--bg-darker) 0%, #0d1020 50%, #1a0a20 100%);
+}
+
+.menu-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(ellipse at 20% 80%, var(--zerg-glow) 0%, transparent 40%),
+    radial-gradient(ellipse at 80% 20%, var(--human-glow) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 50%, var(--protoss-glow) 0%, transparent 50%);
+  opacity: 0.3;
+  animation: pulse-bg 8s ease-in-out infinite;
+}
+
+@keyframes pulse-bg {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.4; }
+}
+
+.menu-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+
+.game-title {
+  font-family: var(--font-display);
+  font-size: 4.5rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 50%, var(--accent-gold) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 60px rgba(0, 212, 255, 0.5);
+  margin-bottom: var(--spacing-xs);
+  animation: title-glow 3s ease-in-out infinite;
+}
+
+.game-title span {
+  display: block;
+  font-size: 2.5rem;
+  letter-spacing: 0.5em;
+  margin-top: var(--spacing-sm);
+}
+
+@keyframes title-glow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.2); }
+}
+
+.game-subtitle {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  margin-bottom: var(--spacing-xl);
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+/* Buttons */
+.menu-btn {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  padding: var(--spacing-md) var(--spacing-xl);
+  min-width: 280px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.menu-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left var(--transition-slow);
+}
+
+.menu-btn:hover::before {
+  left: 100%;
+}
+
+.menu-btn.primary {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  color: var(--text-primary);
+  box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
+}
+
+.menu-btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 212, 255, 0.5);
+}
+
+.menu-btn.secondary {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.menu-btn.secondary:hover {
+  background: var(--bg-panel-hover);
+  border-color: var(--accent-primary);
+}
+
+.menu-btn.tertiary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.menu-btn.tertiary:hover {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.menu-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-icon {
+  font-size: 1.2rem;
+}
+
+/* ========================================
+   FACTION SELECTION
+   ======================================== */
+#faction-select {
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-xl);
+  background: linear-gradient(180deg, var(--bg-darker) 0%, var(--bg-dark) 100%);
+}
+
+.faction-header {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.faction-header h2 {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.faction-header p {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+}
+
+.faction-cards {
+  display: flex;
+  gap: var(--spacing-xl);
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-xl);
+}
+
+.faction-card {
+  width: 300px;
+  padding: var(--spacing-xl);
+  background: var(--bg-panel);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.faction-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+}
+
+.faction-card[data-faction="zerg"]::before {
+  background: linear-gradient(90deg, var(--zerg-secondary), var(--zerg-primary), var(--zerg-secondary));
+}
+
+.faction-card[data-faction="human"]::before {
+  background: linear-gradient(90deg, var(--human-secondary), var(--human-primary), var(--human-secondary));
+}
+
+.faction-card[data-faction="protoss"]::before {
+  background: linear-gradient(90deg, var(--protoss-secondary), var(--protoss-primary), var(--protoss-secondary));
+}
+
+.faction-card:hover,
+.faction-card.selected {
+  transform: translateY(-8px);
+}
+
+.faction-card:hover::before,
+.faction-card.selected::before {
+  opacity: 1;
+}
+
+.faction-card[data-faction="zerg"]:hover,
+.faction-card[data-faction="zerg"].selected {
+  border-color: var(--zerg-primary);
+  box-shadow: 0 10px 40px var(--zerg-glow);
+}
+
+.faction-card[data-faction="human"]:hover,
+.faction-card[data-faction="human"].selected {
+  border-color: var(--human-primary);
+  box-shadow: 0 10px 40px var(--human-glow);
+}
+
+.faction-card[data-faction="protoss"]:hover,
+.faction-card[data-faction="protoss"].selected {
+  border-color: var(--protoss-primary);
+  box-shadow: 0 10px 40px var(--protoss-glow);
+}
+
+.faction-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto var(--spacing-md);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zerg-icon {
+  background: linear-gradient(135deg, var(--zerg-secondary), var(--zerg-primary));
+  box-shadow: 0 0 30px var(--zerg-glow);
+}
+
+.zerg-icon::after {
+  content: '🦂';
+  font-size: 2.5rem;
+}
+
+.human-icon {
+  background: linear-gradient(135deg, var(--human-secondary), var(--human-primary));
+  box-shadow: 0 0 30px var(--human-glow);
+}
+
+.human-icon::after {
+  content: '🏭';
+  font-size: 2.5rem;
+}
+
+.protoss-icon {
+  background: linear-gradient(135deg, var(--protoss-secondary), var(--protoss-primary));
+  box-shadow: 0 0 30px var(--protoss-glow);
+}
+
+.protoss-icon::after {
+  content: '⚡';
+  font-size: 2.5rem;
+}
+
+.faction-card h3 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  margin-bottom: var(--spacing-sm);
+}
+
+.faction-card[data-faction="zerg"] h3 { color: var(--zerg-primary); }
+.faction-card[data-faction="human"] h3 { color: var(--human-primary); }
+.faction-card[data-faction="protoss"] h3 { color: var(--protoss-primary); }
+
+.faction-desc {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: var(--spacing-md);
+  min-height: 45px;
+}
+
+.faction-traits {
+  list-style: none;
+  text-align: left;
+  padding: var(--spacing-md);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+}
+
+.faction-traits li {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  padding: var(--spacing-xs) 0;
+}
+
+.faction-traits li::before {
+  content: '▸ ';
+  color: var(--accent-primary);
+}
+
+.faction-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: auto;
+}
+
+/* ========================================
+   GAME SCREEN
+   ======================================== */
+#game-screen {
+  position: relative;
+}
+
+#game-canvas-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+#game-canvas-container canvas {
+  display: block;
+}
+
+/* ========================================
+   HUD
+   ======================================== */
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#hud > * {
+  pointer-events: auto;
+}
+
+.hud-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: var(--spacing-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+}
+
+.resource-panel {
+  display: flex;
+  gap: var(--spacing-lg);
+}
+
+.resource {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 500;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-panel);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.resource-icon {
+  font-size: 1.4rem;
+}
+
+.resource.minerals span:last-child { color: #00d4ff; }
+.resource.gas span:last-child { color: #00ff88; }
+.resource.population span:last-child { color: var(--accent-gold); }
+
+.game-time {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-panel);
+  border-radius: 4px;
+}
+
+.hud-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.hud-btn {
+  width: 40px;
+  height: 40px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.hud-btn:hover {
+  background: var(--bg-panel-hover);
+  border-color: var(--accent-primary);
+}
+
+/* Minimap */
+#minimap {
+  position: absolute;
+  bottom: var(--spacing-md);
+  left: var(--spacing-md);
+  width: 200px;
+  height: 200px;
+  background: var(--bg-panel);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+#minimap-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* Selection Panel */
+#selection-panel {
+  position: absolute;
+  bottom: var(--spacing-md);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 400px;
+  padding: var(--spacing-md);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+#selected-info {
+  text-align: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.selected-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+
+#action-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  width: 50px;
+  height: 50px;
+  background: var(--bg-darker);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-btn:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ========================================
+   CHAT INTERFACE
+   ======================================== */
+#chat-container {
+  position: absolute;
+  bottom: var(--spacing-md);
+  right: var(--spacing-md);
+  width: 350px;
+  max-height: 400px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: max-height var(--transition-normal);
+}
+
+#chat-container.minimized {
+  max-height: 44px;
+}
+
+#chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid var(--border-color);
+}
+
+#advisor-name {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--accent-primary);
+}
+
+.chat-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-btn:hover {
+  background: var(--bg-panel-hover);
+  color: var(--text-primary);
+}
+
+#chat-messages {
+  flex: 1;
+  padding: var(--spacing-md);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-height: 250px;
+}
+
+.chat-message {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: 8px;
+  max-width: 85%;
+  animation: message-in 0.3s ease;
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-message.user {
+  align-self: flex-end;
+  background: var(--accent-primary);
+  color: var(--bg-dark);
+}
+
+.chat-message.ai {
+  align-self: flex-start;
+  background: rgba(100, 120, 160, 0.2);
+  border: 1px solid var(--border-color);
+}
+
+.chat-message.system {
+  align-self: center;
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  color: var(--accent-gold);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+#chat-input-container {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid var(--border-color);
+}
+
+#chat-input {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-darker);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+}
+
+#chat-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+#chat-input::placeholder {
+  color: var(--text-muted);
+}
+
+#chat-send {
+  padding: 0 var(--spacing-md);
+}
+
+/* ========================================
+   SCROLLBAR
+   ======================================== */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-darker);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+@media (max-width: 1024px) {
+  .game-title {
+    font-size: 3rem;
+  }
+  
+  .game-title span {
+    font-size: 1.8rem;
+  }
+  
+  .faction-cards {
+    gap: var(--spacing-md);
+  }
+  
+  .faction-card {
+    width: 260px;
+    padding: var(--spacing-md);
+  }
+  
+  #chat-container {
+    width: 300px;
+  }
+  
+  #minimap {
+    width: 150px;
+    height: 150px;
+  }
+}
+
+@media (max-width: 768px) {
+  .game-title {
+    font-size: 2rem;
+  }
+  
+  .game-title span {
+    font-size: 1.2rem;
+  }
+  
+  .faction-cards {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .resource-panel {
+    gap: var(--spacing-sm);
+  }
+  
+  .resource {
+    font-size: 1rem;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+  
+  #chat-container {
+    width: calc(100% - 220px);
+    right: var(--spacing-sm);
+    bottom: var(--spacing-sm);
+  }
+  
+  #selection-panel {
+    width: calc(100% - 430px);
+    left: 220px;
+    transform: none;
+  }
+}

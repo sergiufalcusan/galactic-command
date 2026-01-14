@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="A StarCraft-inspired browser strategy game with AI advisors">
+  <title>Galactic Command - Strategy Game</title>
+  <link rel="stylesheet" href="/src/styles/index.css">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <!-- Main Menu Screen -->
+    <div id="main-menu" class="screen active">
+      <div class="menu-background"></div>
+      <div class="menu-content">
+        <h1 class="game-title">GALACTIC<span>COMMAND</span></h1>
+        <p class="game-subtitle">Strategic Warfare Evolved</p>
+        <div class="menu-buttons">
+          <button id="btn-new-game" class="menu-btn primary">
+            <span class="btn-icon">▶</span>
+            New Game
+          </button>
+          <button id="btn-load-game" class="menu-btn secondary">
+            <span class="btn-icon">📂</span>
+            Load Game
+          </button>
+          <button id="btn-settings" class="menu-btn tertiary">
+            <span class="btn-icon">⚙</span>
+            Settings
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Faction Selection Screen -->
+    <div id="faction-select" class="screen">
+      <div class="faction-header">
+        <h2>Choose Your Faction</h2>
+        <p>Each faction has unique units, buildings, and an AI advisor with distinct personality</p>
+      </div>
+      <div class="faction-cards">
+        <div class="faction-card" data-faction="zerg">
+          <div class="faction-icon zerg-icon"></div>
+          <h3>ZERG</h3>
+          <p class="faction-desc">Organic swarm. Overwhelm with numbers. Evolve and adapt.</p>
+          <ul class="faction-traits">
+            <li>Workers: Drones</li>
+            <li>Base: Hatchery</li>
+            <li>Style: Swarm Tactics</li>
+          </ul>
+        </div>
+        <div class="faction-card" data-faction="human">
+          <div class="faction-icon human-icon"></div>
+          <h3>HUMAN</h3>
+          <p class="faction-desc">Industrial might. Balanced forces. Technological supremacy.</p>
+          <ul class="faction-traits">
+            <li>Workers: SCVs</li>
+            <li>Base: Command Center</li>
+            <li>Style: Balanced</li>
+          </ul>
+        </div>
+        <div class="faction-card" data-faction="protoss">
+          <div class="faction-icon protoss-icon"></div>
+          <h3>PROTOSS</h3>
+          <p class="faction-desc">Psionic warriors. Quality over quantity. Shield technology.</p>
+          <ul class="faction-traits">
+            <li>Workers: Probes</li>
+            <li>Base: Nexus</li>
+            <li>Style: Elite Units</li>
+          </ul>
+        </div>
+      </div>
+      <div class="faction-actions">
+        <button id="btn-back-menu" class="menu-btn tertiary">← Back</button>
+        <button id="btn-start-game" class="menu-btn primary" disabled>Start Game →</button>
+      </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="screen">
+      <!-- Three.js Canvas Container -->
+      <div id="game-canvas-container"></div>
+      
+      <!-- HUD Overlay -->
+      <div id="hud">
+        <div class="hud-top">
+          <div class="resource-panel">
+            <div class="resource minerals">
+              <span class="resource-icon">💎</span>
+              <span id="minerals-count">0</span>
+            </div>
+            <div class="resource gas">
+              <span class="resource-icon">🔥</span>
+              <span id="gas-count">0</span>
+            </div>
+            <div class="resource population">
+              <span class="resource-icon">👥</span>
+              <span id="population-count">0</span>/<span id="population-max">10</span>
+            </div>
+          </div>
+          <div class="game-time">
+            <span id="game-timer">00:00</span>
+          </div>
+          <div class="hud-actions">
+            <button id="btn-save-game" class="hud-btn" title="Save Game">💾</button>
+            <button id="btn-game-menu" class="hud-btn" title="Menu">☰</button>
+          </div>
+        </div>
+        
+        <!-- Minimap -->
+        <div id="minimap">
+          <canvas id="minimap-canvas"></canvas>
+        </div>
+        
+        <!-- Selection Panel -->
+        <div id="selection-panel">
+          <div id="selected-info">
+            <span class="selected-name">Nothing selected</span>
+          </div>
+          <div id="action-buttons"></div>
+        </div>
+      </div>
+      
+      <!-- Chat Interface -->
+      <div id="chat-container">
+        <div id="chat-header">
+          <span id="advisor-name">AI Advisor</span>
+          <button id="chat-toggle" class="chat-btn">−</button>
+        </div>
+        <div id="chat-messages"></div>
+        <div id="chat-input-container">
+          <input type="text" id="chat-input" placeholder="Type a command or message..." autocomplete="off">
+          <button id="chat-send" class="chat-btn">→</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
