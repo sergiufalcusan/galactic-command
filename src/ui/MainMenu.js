@@ -43,36 +43,34 @@ export class MainMenu {
   }
 
   showSettings() {
-    // Settings modal for API keys
+    // Settings modal (API keys moved to .env file)
     const modal = document.createElement('div');
     modal.className = 'settings-modal';
+
+    const hasOpenAI = !!import.meta.env.VITE_OPENAI_API_KEY;
+    const hasElevenLabs = !!import.meta.env.VITE_ELEVENLABS_API_KEY;
+
     modal.innerHTML = `
       <div class="settings-content">
         <h3>Settings</h3>
         
         <div class="settings-group">
-          <label for="api-key-input">OpenAI API Key</label>
-          <input type="password" id="api-key-input" placeholder="sk-..." value="${localStorage.getItem('openai_api_key') || ''}">
-          <p class="settings-hint">For smarter AI responses. Leave empty for basic AI.</p>
+          <h4>API Configuration</h4>
+          <p class="settings-hint">API keys are now configured via the <code>.env</code> file in the project root.</p>
+          <p class="settings-hint">Copy <code>.env.example</code> to <code>.env</code> and add your keys.</p>
         </div>
         
         <div class="settings-group">
-          <label for="elevenlabs-key-input">ElevenLabs API Key</label>
-          <input type="password" id="elevenlabs-key-input" placeholder="xi-..." value="${localStorage.getItem('elevenlabs_api_key') || ''}">
-          <p class="settings-hint">Enable voice synthesis for AI responses.</p>
-        </div>
-        
-        <div class="settings-group">
-          <label class="toggle-label">
-            <input type="checkbox" id="voice-enabled-toggle" ${localStorage.getItem('voice_enabled') === 'true' ? 'checked' : ''}>
-            <span>Enable Voice</span>
-          </label>
-          <p class="settings-hint">AI advisor will speak responses aloud.</p>
+          <p class="settings-status">
+            OpenAI API: <span class="${hasOpenAI ? 'status-ok' : 'status-missing'}">${hasOpenAI ? '✓ Configured' : '✗ Not configured'}</span>
+          </p>
+          <p class="settings-status">
+            ElevenLabs Voice: <span class="${hasElevenLabs ? 'status-ok' : 'status-missing'}">${hasElevenLabs ? '✓ Configured' : '✗ Not configured'}</span>
+          </p>
         </div>
         
         <div class="settings-actions">
-          <button id="settings-save" class="menu-btn primary">Save</button>
-          <button id="settings-cancel" class="menu-btn tertiary">Cancel</button>
+          <button id="settings-close" class="menu-btn primary">Close</button>
         </div>
       </div>
     `;
@@ -107,31 +105,33 @@ export class MainMenu {
           margin-bottom: 20px;
           color: var(--accent-primary);
         }
+        .settings-content h4 {
+          margin-bottom: 10px;
+          color: var(--text-primary);
+        }
         .settings-group {
           margin-bottom: 20px;
-        }
-        .settings-group label {
-          display: block;
-          margin-bottom: 8px;
-          color: var(--text-secondary);
-        }
-        .settings-group input {
-          width: 100%;
-          padding: 10px;
-          background: var(--bg-darker);
-          border: 1px solid var(--border-color);
-          border-radius: 4px;
-          color: var(--text-primary);
-          font-family: var(--font-body);
-        }
-        .settings-group input:focus {
-          outline: none;
-          border-color: var(--accent-primary);
         }
         .settings-hint {
           font-size: 0.85rem;
           color: var(--text-muted);
           margin-top: 8px;
+        }
+        .settings-hint code {
+          background: var(--bg-darker);
+          padding: 2px 6px;
+          border-radius: 3px;
+          color: var(--accent-primary);
+        }
+        .settings-status {
+          margin: 8px 0;
+          color: var(--text-secondary);
+        }
+        .status-ok {
+          color: #00ff00;
+        }
+        .status-missing {
+          color: #ff6600;
         }
         .settings-actions {
           display: flex;
@@ -145,31 +145,7 @@ export class MainMenu {
     document.body.appendChild(modal);
 
     // Event listeners
-    modal.querySelector('#settings-save').addEventListener('click', () => {
-      // Save OpenAI API key
-      const apiKey = modal.querySelector('#api-key-input').value.trim();
-      if (apiKey) {
-        localStorage.setItem('openai_api_key', apiKey);
-      } else {
-        localStorage.removeItem('openai_api_key');
-      }
-
-      // Save ElevenLabs API key
-      const elevenLabsKey = modal.querySelector('#elevenlabs-key-input').value.trim();
-      if (elevenLabsKey) {
-        localStorage.setItem('elevenlabs_api_key', elevenLabsKey);
-      } else {
-        localStorage.removeItem('elevenlabs_api_key');
-      }
-
-      // Save voice enabled state
-      const voiceEnabled = modal.querySelector('#voice-enabled-toggle').checked;
-      localStorage.setItem('voice_enabled', voiceEnabled.toString());
-
-      modal.remove();
-    });
-
-    modal.querySelector('#settings-cancel').addEventListener('click', () => {
+    modal.querySelector('#settings-close').addEventListener('click', () => {
       modal.remove();
     });
 

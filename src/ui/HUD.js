@@ -21,30 +21,38 @@ export class HUD {
     }
 
     init() {
-        // Save button
-        this.saveBtn.addEventListener('click', () => {
-            if (gameState.save()) {
-                this.showNotification('Game Saved!');
-            }
-        });
+        // Handlers for removal
+        this.handlers = {
+            onSave: () => {
+                if (gameState.save()) {
+                    this.showNotification('Game Saved!');
+                }
+            },
+            onMenu: () => this.showInGameMenu(),
+            onResources: (data) => this.updateResources(data),
+            onTime: () => this.updateTimer(),
+            onProduction: (item) => this.showNotification(`${item.name} ready!`)
+        };
 
-        // Menu button
-        this.menuBtn.addEventListener('click', () => {
-            this.showInGameMenu();
-        });
+        // UI buttons
+        this.saveBtn.addEventListener('click', this.handlers.onSave);
+        this.menuBtn.addEventListener('click', this.handlers.onMenu);
 
         // Subscribe to game state updates
-        gameState.on('resourcesUpdated', (data) => {
-            this.updateResources(data);
-        });
+        gameState.on('resourcesUpdated', this.handlers.onResources);
+        gameState.on('timeUpdated', this.handlers.onTime);
+        gameState.on('productionComplete', this.handlers.onProduction);
+    }
 
-        gameState.on('timeUpdated', () => {
-            this.updateTimer();
-        });
+    dispose() {
+        // Remove UI listeners
+        this.saveBtn.removeEventListener('click', this.handlers.onSave);
+        this.menuBtn.removeEventListener('click', this.handlers.onMenu);
 
-        gameState.on('productionComplete', (item) => {
-            this.showNotification(`${item.name} ready!`);
-        });
+        // Unsubscribe from game state
+        gameState.off('resourcesUpdated', this.handlers.onResources);
+        gameState.off('timeUpdated', this.handlers.onTime);
+        gameState.off('productionComplete', this.handlers.onProduction);
     }
 
     update() {

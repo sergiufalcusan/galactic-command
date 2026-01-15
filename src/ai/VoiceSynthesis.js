@@ -225,6 +225,13 @@ export class VoiceSynthesis {
             return [];
         }
     }
+    dispose() {
+        this.stop();
+        if (this.audioContext) {
+            this.audioContext.close();
+            this.audioContext = null;
+        }
+    }
 }
 
 export default VoiceSynthesis;

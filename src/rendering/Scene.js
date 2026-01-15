@@ -54,7 +54,7 @@ export class GameScene {
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.container.appendChild(this.renderer.domElement);
 
-        // Controls
+        // Controls - disabled by default, enabled with Shift key
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
@@ -63,6 +63,21 @@ export class GameScene {
         this.controls.maxDistance = 120;
         this.controls.maxPolarAngle = Math.PI / 2.2;
         this.controls.target.set(0, 0, 0);
+        this.controls.enabled = false; // Disabled by default
+
+        // Enable controls only when Shift is held
+        this.onKeyDown = (e) => {
+            if (e.key === 'Shift') {
+                this.controls.enabled = true;
+            }
+        };
+        this.onKeyUp = (e) => {
+            if (e.key === 'Shift') {
+                this.controls.enabled = false;
+            }
+        };
+        window.addEventListener('keydown', this.onKeyDown);
+        window.addEventListener('keyup', this.onKeyUp);
 
         // Lighting
         this.setupLighting();
@@ -129,17 +144,49 @@ export class GameScene {
         if (object) {
             this.scene.remove(object);
             this.objects.delete(id);
+            this.disposeObject(object);
+        }
+    }
 
-            // Dispose geometry and materials
-            if (object.geometry) object.geometry.dispose();
-            if (object.material) {
-                if (Array.isArray(object.material)) {
-                    object.material.forEach(m => m.dispose());
-                } else {
-                    object.material.dispose();
+    /**
+     * Recursively dispose of an object's resources (geometries, materials, textures)
+     */
+    disposeObject(object) {
+        if (!object) return;
+
+        object.traverse((node) => {
+            if (node.isMesh || node.isSprite || node.isLine || node.isPoints) {
+                // Dispose geometry
+                if (node.geometry) {
+                    node.geometry.dispose();
+                }
+
+                // Dispose materials
+                if (node.material) {
+                    if (Array.isArray(node.material)) {
+                        node.material.forEach(m => this.disposeMaterial(m));
+                    } else {
+                        this.disposeMaterial(node.material);
+                    }
                 }
             }
-        }
+        });
+    }
+
+    /**
+     * Helper to dispose of a single material and its textures
+     */
+    disposeMaterial(material) {
+        if (!material) return;
+
+        // Dispose textures
+        Object.keys(material).forEach(key => {
+            if (material[key] && material[key].isTexture) {
+                material[key].dispose();
+            }
+        });
+
+        material.dispose();
     }
 
     getObject(id) {

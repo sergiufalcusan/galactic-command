@@ -1,8 +1,9 @@
 /**
- * Unit Rendering - Workers and Combat Units
+ * Unit Rendering - Workers and Combat Units using GLTF Models
  */
 
 import * as THREE from 'three';
+import { modelLoader } from './ModelLoader.js';
 
 // Faction-specific colors
 const FACTION_COLORS = {
@@ -11,32 +12,74 @@ const FACTION_COLORS = {
     protoss: { primary: 0xffcc00, secondary: 0x886600, emissive: 0x664400 }
 };
 
+// Model paths for each faction's worker
+const WORKER_MODELS = {
+    zerg: '/models/units/worker_zerg.glb',
+    human: '/models/units/worker_human.glb',
+    protoss: '/models/units/worker_protoss.glb'
+};
+
+// Combat unit models
+const COMBAT_MODELS = {
+    marine: '/models/units/marine.glb',
+    zergling: '/models/units/zergling.glb',
+    zealot: '/models/units/zealot.glb',
+    overlord: '/models/units/overlord.glb'
+};
+
+// Model scales (may need adjustment)
+const MODEL_SCALES = {
+    worker: 1.5,
+    marine: 0.8,
+    zergling: 0.8,
+    zealot: 0.8,
+    overlord: 1.2
+};
+
 export class UnitRenderer {
     constructor(scene, faction) {
         this.scene = scene;
         this.faction = faction;
         this.units = new Map();
         this.colors = FACTION_COLORS[faction.id] || FACTION_COLORS.human;
+        this.modelsLoaded = false;
+
+        // Preload models
+        this.preloadModels();
     }
 
-    createWorker(unitData) {
+    async preloadModels() {
+        const modelsToLoad = [
+            WORKER_MODELS[this.faction.id] || WORKER_MODELS.human,
+            ...Object.values(COMBAT_MODELS)
+        ];
+
+        await modelLoader.preloadModels(modelsToLoad);
+        this.modelsLoaded = true;
+        console.log('[UnitRenderer] Models preloaded');
+    }
+
+    async createWorker(unitData) {
         const group = new THREE.Group();
 
-        // Worker body shape varies by faction
-        let body;
+        const modelPath = WORKER_MODELS[this.faction.id] || WORKER_MODELS.human;
 
-        if (this.faction.id === 'zerg') {
-            // Organic, insect-like shape
-            body = this.createZergWorker();
-        } else if (this.faction.id === 'protoss') {
-            // Sleek, hovering probe
-            body = this.createProtossWorker();
-        } else {
-            // Mechanical SCV
-            body = this.createHumanWorker();
+        try {
+            const model = await modelLoader.load(modelPath);
+            model.scale.setScalar(MODEL_SCALES.worker);
+            modelLoader.applyFactionColor(model, this.colors.primary);
+
+            // Center the model within the group
+            const box = new THREE.Box3().setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            model.position.x -= center.x;
+            model.position.z -= center.z;
+
+            group.add(model);
+        } catch (error) {
+            console.warn('[UnitRenderer] Failed to load worker model, using fallback');
+            group.add(this.createFallbackWorker());
         }
-
-        group.add(body);
 
         // Add selection ring (hidden by default)
         const selectionRing = this.createSelectionRing();
@@ -54,152 +97,47 @@ export class UnitRenderer {
         return group;
     }
 
-    createZergWorker() {
+    createFallbackWorker() {
+        // Simple procedural fallback if model fails to load
         const group = new THREE.Group();
-
-        // Main body (organic blob)
         const bodyGeometry = new THREE.SphereGeometry(0.6, 12, 8);
-        bodyGeometry.scale(1.2, 0.8, 1);
-        const bodyMaterial = new THREE.MeshStandardMaterial({
-            color: this.colors.primary,
-            roughness: 0.6,
-            metalness: 0.2,
-            emissive: this.colors.emissive,
-            emissiveIntensity: 0.3
-        });
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        body.position.y = 0.5;
-        body.castShadow = true;
-        group.add(body);
-
-        // Eyes/sensory organs
-        const eyeGeometry = new THREE.SphereGeometry(0.15, 8, 8);
-        const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xff0044 });
-
-        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-        leftEye.position.set(-0.3, 0.6, 0.4);
-        group.add(leftEye);
-
-        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-        rightEye.position.set(0.3, 0.6, 0.4);
-        group.add(rightEye);
-
-        return group;
-    }
-
-    createHumanWorker() {
-        const group = new THREE.Group();
-
-        // SCV body (boxy mechanical)
-        const bodyGeometry = new THREE.BoxGeometry(1, 1.2, 0.8);
-        const bodyMaterial = new THREE.MeshStandardMaterial({
-            color: this.colors.primary,
-            roughness: 0.4,
-            metalness: 0.6,
-            emissive: this.colors.emissive,
-            emissiveIntensity: 0.2
-        });
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        body.position.y = 0.8;
-        body.castShadow = true;
-        group.add(body);
-
-        // Cockpit/visor
-        const visorGeometry = new THREE.BoxGeometry(0.6, 0.3, 0.1);
-        const visorMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ffff,
-            transparent: true,
-            opacity: 0.8
-        });
-        const visor = new THREE.Mesh(visorGeometry, visorMaterial);
-        visor.position.set(0, 1.1, 0.45);
-        group.add(visor);
-
-        // Arms/tools
-        const armGeometry = new THREE.BoxGeometry(0.2, 0.6, 0.2);
-        const armMaterial = new THREE.MeshStandardMaterial({
-            color: 0x666666,
-            roughness: 0.5,
-            metalness: 0.7
-        });
-
-        const leftArm = new THREE.Mesh(armGeometry, armMaterial);
-        leftArm.position.set(-0.7, 0.6, 0);
-        group.add(leftArm);
-
-        const rightArm = new THREE.Mesh(armGeometry, armMaterial);
-        rightArm.position.set(0.7, 0.6, 0);
-        group.add(rightArm);
-
-        return group;
-    }
-
-    createProtossWorker() {
-        const group = new THREE.Group();
-
-        // Floating probe body
-        const bodyGeometry = new THREE.DodecahedronGeometry(0.5, 0);
-        const bodyMaterial = new THREE.MeshStandardMaterial({
-            color: this.colors.primary,
-            roughness: 0.2,
-            metalness: 0.8,
-            emissive: this.colors.emissive,
-            emissiveIntensity: 0.5
-        });
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        body.position.y = 1;
-        body.castShadow = true;
-        group.add(body);
-
-        // Energy glow underneath
-        const glowGeometry = new THREE.ConeGeometry(0.4, 0.8, 8);
-        const glowMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ffff,
-            transparent: true,
-            opacity: 0.5
-        });
-        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-        glow.position.y = 0.3;
-        glow.rotation.x = Math.PI;
-        group.add(glow);
-
-        // Psionic orb on top
-        const orbGeometry = new THREE.SphereGeometry(0.2, 12, 12);
-        const orbMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ffff,
-            transparent: true,
-            opacity: 0.8
-        });
-        const orb = new THREE.Mesh(orbGeometry, orbMaterial);
-        orb.position.y = 1.6;
-        group.add(orb);
-
-        return group;
-    }
-
-    createCombatUnit(unitData) {
-        const group = new THREE.Group();
-
-        // Generic combat unit body
-        const bodyGeometry = new THREE.BoxGeometry(0.8, 1.4, 0.6);
         const bodyMaterial = new THREE.MeshStandardMaterial({
             color: this.colors.primary,
             roughness: 0.4,
             metalness: 0.5,
             emissive: this.colors.emissive,
-            emissiveIntensity: 0.2
+            emissiveIntensity: 0.3
         });
         const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        body.position.y = 0.7;
+        body.position.y = 0.6;
         body.castShadow = true;
         group.add(body);
+        return group;
+    }
 
-        // Head
-        const headGeometry = new THREE.SphereGeometry(0.3, 12, 12);
-        const head = new THREE.Mesh(headGeometry, bodyMaterial);
-        head.position.y = 1.6;
-        head.castShadow = true;
-        group.add(head);
+    async createCombatUnit(unitData) {
+        const group = new THREE.Group();
+
+        const unitType = unitData.type || 'marine';
+        const modelPath = COMBAT_MODELS[unitType] || COMBAT_MODELS.marine;
+        const scale = MODEL_SCALES[unitType] || 0.8;
+
+        try {
+            const model = await modelLoader.load(modelPath);
+            model.scale.setScalar(scale);
+            modelLoader.applyFactionColor(model, this.colors.primary);
+
+            // Center the model within the group
+            const box = new THREE.Box3().setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            model.position.x -= center.x;
+            model.position.z -= center.z;
+
+            group.add(model);
+        } catch (error) {
+            console.warn('[UnitRenderer] Failed to load combat model, using fallback');
+            group.add(this.createFallbackCombatUnit());
+        }
 
         // Selection ring
         const selectionRing = this.createSelectionRing();
@@ -213,6 +151,23 @@ export class UnitRenderer {
         this.scene.addObject(unitData.id, group);
         this.units.set(unitData.id, group);
 
+        return group;
+    }
+
+    createFallbackCombatUnit() {
+        const group = new THREE.Group();
+        const bodyGeometry = new THREE.BoxGeometry(0.8, 1.4, 0.6);
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+            color: this.colors.primary,
+            roughness: 0.4,
+            metalness: 0.5,
+            emissive: this.colors.emissive,
+            emissiveIntensity: 0.2
+        });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = 0.7;
+        body.castShadow = true;
+        group.add(body);
         return group;
     }
 
@@ -240,7 +195,6 @@ export class UnitRenderer {
     updateUnitPosition(unitId, x, z) {
         const unit = this.units.get(unitId);
         if (unit) {
-            // Smooth movement could be added here
             unit.position.x = x;
             unit.position.z = z;
         }
@@ -258,13 +212,12 @@ export class UnitRenderer {
         this.units.forEach((group, id) => {
             const data = group.userData.unitData;
 
-            // Idle bobbing animation
+            // Idle bobbing animation for Protoss
             if (this.faction.id === 'protoss') {
-                // Probes float and bob
                 group.position.y = Math.sin(time * 2 + group.position.x) * 0.1;
             }
 
-            // Mining animation
+            // Mining animation - gentle rotation
             if (data && (data.state === 'mining' || data.state === 'harvesting_gas')) {
                 group.rotation.y = Math.sin(time * 5) * 0.2;
             }

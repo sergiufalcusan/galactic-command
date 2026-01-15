@@ -24,3 +24,6 @@ yarn-error.log*
 # Local cache
 .cache/
 *.local
+
+kenney_space-kit.zip
+kenney_space/*

@@ -25,6 +25,17 @@ export class ChatInterface {
         this.toggleButton = this.container.querySelector('#chat-toggle');
         this.advisorName = this.container.querySelector('#advisor-name');
 
+        // Handlers for removal
+        this.handlers = {
+            onSend: () => this.handleSend(),
+            onKeyPress: (e) => {
+                if (e.key === 'Enter') {
+                    this.handleSend();
+                }
+            },
+            onToggle: () => this.toggleMinimize()
+        };
+
         // Set advisor name
         if (this.agent && this.agent.faction) {
             this.advisorName.textContent = this.agent.faction.advisor.name;
@@ -32,20 +43,23 @@ export class ChatInterface {
         }
 
         // Event listeners
-        this.sendButton.addEventListener('click', () => this.handleSend());
-        this.inputField.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.handleSend();
-            }
-        });
-
-        this.toggleButton.addEventListener('click', () => this.toggleMinimize());
+        this.sendButton.addEventListener('click', this.handlers.onSend);
+        this.inputField.addEventListener('keypress', this.handlers.onKeyPress);
+        this.toggleButton.addEventListener('click', this.handlers.onToggle);
 
         // Add initial greeting
         if (this.agent) {
             setTimeout(() => {
                 this.addMessage(this.agent.getGreeting(), 'ai');
             }, 500);
+        }
+    }
+
+    dispose() {
+        if (this.handlers) {
+            this.sendButton.removeEventListener('click', this.handlers.onSend);
+            this.inputField.removeEventListener('keypress', this.handlers.onKeyPress);
+            this.toggleButton.removeEventListener('click', this.handlers.onToggle);
         }
     }
 

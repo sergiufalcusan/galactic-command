@@ -15,6 +15,7 @@ import MainMenu from './ui/MainMenu.js';
 import FactionSelect from './ui/FactionSelect.js';
 import ChatInterface from './ui/ChatInterface.js';
 import HUD from './ui/HUD.js';
+import BuildingPlacementUI from './ui/BuildingPlacementUI.js';
 
 class Game {
     constructor() {
@@ -68,13 +69,70 @@ class Game {
             () => this.showMainMenu()
         );
 
-        // Handle quit to menu event
+        // Global Event Listeners (One-time setup)
         window.addEventListener('quitToMenu', () => this.quitToMenu());
+        window.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        window.addEventListener('gameFeedback', (e) => {
+            this.hud?.showNotification(e.detail);
+        });
+    }
 
-        // Keyboard shortcuts
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.isRunning) {
+    handleKeyDown(e) {
+        if (!this.isRunning) return;
+
+        // ESC - show menu or cancel building placement
+        if (e.key === 'Escape') {
+            if (this.inputHandler?.buildingPlacementMode) {
+                this.inputHandler.cancelBuildingPlacement();
+                this.buildingPlacementUI?.hide();
+            } else {
                 this.hud?.showInGameMenu();
+            }
+            return;
+        }
+
+        // B - Toggle building menu
+        if (e.key === 'b' || e.key === 'B') {
+            this.toggleBuildingMenu();
+            return;
+        }
+
+        // Building hotkeys when in building mode
+        if (this.buildingPlacementUI?.isVisible) {
+            const buildingMap = {
+                's': 'supply',
+                'r': 'barracks',
+                'f': 'factory',
+                'g': 'gasExtractor'
+            };
+            const building = buildingMap[e.key.toLowerCase()];
+            if (building) {
+                this.selectBuildingToPlace(building);
+            }
+        }
+    }
+
+    toggleBuildingMenu() {
+        if (!this.buildingPlacementUI) {
+            this.buildingPlacementUI = new BuildingPlacementUI(
+                (type) => this.selectBuildingToPlace(type),
+                () => this.inputHandler?.cancelBuildingPlacement()
+            );
+        }
+        this.buildingPlacementUI.toggle();
+    }
+
+    selectBuildingToPlace(buildingType) {
+        this.buildingPlacementUI?.hide();
+
+        this.inputHandler?.enterBuildingPlacementMode(buildingType, (type, position) => {
+            const result = this.gameActions.buildStructure(type, position);
+            if (result.success) {
+                this.hud?.showNotification(result.message);
+                // Notify AI of player's action for feedback
+                this.aiAgent?.notifyPlayerAction('build', { type, buildingName: result.message });
+            } else {
+                this.hud?.showNotification(result.message, 'error');
             }
         });
     }
@@ -97,11 +155,38 @@ class Game {
         });
     }
 
+    cleanup() {
+        console.log('[Game] Cleaning up existing systems...');
+        this.stopGame();
+
+        if (this.inputHandler) this.inputHandler.dispose();
+        if (this.hud) this.hud.dispose();
+        if (this.chatInterface) this.chatInterface.dispose();
+        if (this.aiAgent) this.aiAgent.dispose();
+
+        if (this.unitRenderer) this.unitRenderer.dispose();
+        if (this.buildingRenderer) this.buildingRenderer.dispose();
+        if (this.terrainRenderer) this.terrainRenderer.dispose();
+
+        if (this.scene) {
+            this.scene.dispose();
+            this.scene = null;
+        }
+
+        // We don't remove productionComplete here because we moved it to one-time init
+    }
+
     startNewGame(factionId) {
         console.log('Starting new game with faction:', factionId);
 
+        // Pre-cleanup
+        this.cleanup();
+
         // Initialize game state
         gameState.startNewGame(factionId);
+
+        // Register production handler AFTER gameState reset (reset clears listeners)
+        this.setupProductionHandler();
 
         // Show game screen
         this.hideAllScreens();
@@ -122,19 +207,18 @@ class Game {
             console.log('Action result:', result);
         });
 
-        // Load API key if available
-        const apiKey = localStorage.getItem('openai_api_key');
+        // Load API keys from environment variables
+        const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
         if (apiKey) {
             this.aiAgent.setApiKey(apiKey);
         }
 
-        // Load voice settings
-        const elevenLabsKey = localStorage.getItem('elevenlabs_api_key');
+        // Load voice settings from environment variables
+        const elevenLabsKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
         if (elevenLabsKey) {
             this.aiAgent.setVoiceApiKey(elevenLabsKey);
+            this.aiAgent.setVoiceEnabled(true);
         }
-        const voiceEnabled = localStorage.getItem('voice_enabled') === 'true';
-        this.aiAgent.setVoiceEnabled(voiceEnabled && !!elevenLabsKey);
 
         // Initialize chat interface
         const chatContainer = document.getElementById('chat-container');
@@ -152,13 +236,10 @@ class Game {
             (selectedUnits) => this.hud.showSelection(selectedUnits[0])
         );
 
-        // Listen for feedback events
-        window.addEventListener('gameFeedback', (e) => {
-            this.hud.showNotification(e.detail);
-        });
-
-        // Register production completion handler ONCE (not in update loop)
-        this.setupProductionHandler();
+        // Connect player actions to AI feedback
+        this.inputHandler.onPlayerAction = (actionType, details) => {
+            this.aiAgent?.notifyPlayerAction(actionType, details);
+        };
 
         // Create initial game objects
         this.createInitialGameObjects();
@@ -168,10 +249,10 @@ class Game {
     }
 
     setupProductionHandler() {
-        // Only register once - this handles when units/buildings finish producing
+        // Handles when units/buildings finish producing
         gameState.on('productionComplete', (item) => {
             if (item.category === 'building') {
-                this.buildingRenderer.completeConstruction(item.buildingId);
+                this.buildingRenderer?.completeConstruction(item.buildingId);
             } else if (item.category === 'unit') {
                 // Unit is already added in gameState.completeProduction
                 // We need to create the visual
@@ -190,6 +271,12 @@ class Game {
     loadGame() {
         if (gameState.load()) {
             console.log('Game loaded successfully');
+
+            // Pre-cleanup before loading
+            this.cleanup();
+
+            // Register production handler (saved game already loaded the state, but listeners are cleared)
+            this.setupProductionHandler();
 
             // Show game screen
             this.hideAllScreens();
@@ -210,18 +297,18 @@ class Game {
                 console.log('Action result:', result);
             });
 
-            const apiKey = localStorage.getItem('openai_api_key');
+            // Load API keys from environment variables
+            const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
             if (apiKey) {
                 this.aiAgent.setApiKey(apiKey);
             }
 
-            // Load voice settings
-            const elevenLabsKey = localStorage.getItem('elevenlabs_api_key');
+            // Load voice settings from environment variables
+            const elevenLabsKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
             if (elevenLabsKey) {
                 this.aiAgent.setVoiceApiKey(elevenLabsKey);
+                this.aiAgent.setVoiceEnabled(true);
             }
-            const voiceEnabled = localStorage.getItem('voice_enabled') === 'true';
-            this.aiAgent.setVoiceEnabled(voiceEnabled && !!elevenLabsKey);
 
             // Initialize chat interface
             const chatContainer = document.getElementById('chat-container');
@@ -239,8 +326,10 @@ class Game {
                 (selectedUnits) => this.hud.showSelection(selectedUnits[0])
             );
 
-            // Register production handler
-            this.setupProductionHandler();
+            // Connect player actions to AI feedback
+            this.inputHandler.onPlayerAction = (actionType, details) => {
+                this.aiAgent?.notifyPlayerAction(actionType, details);
+            };
 
             // Recreate game objects from saved state
             this.recreateGameObjects();
@@ -390,28 +479,85 @@ class Game {
     }
 
     updateWorkerPositions(deltaTime) {
-        // Simple worker movement simulation
-        gameState.units.forEach(unit => {
-            if (unit.type === 'worker' && unit.state === 'mining') {
-                // Find target mineral patch
+        const speed = 5;
+        const workerRadius = 1.0; // Collision radius
+        const separationForce = 2.0;
+
+        gameState.units.forEach((unit, index) => {
+            if (unit.type !== 'worker') return;
+
+            let targetX = null;
+            let targetZ = null;
+
+            // Determine target based on state
+            if (unit.state === 'mining') {
                 const patch = gameState.mineralPatches.find(p => p.id === unit.targetResource);
                 if (patch) {
-                    // Move towards patch or base (simulated round-trip)
-                    const dx = patch.x - unit.x;
-                    const dz = patch.z - unit.z;
-                    const distance = Math.sqrt(dx * dx + dz * dz);
+                    // Calculate offset position around the resource
+                    const workerIndex = this.getWorkerIndexAtResource(unit.id, unit.targetResource, 'mineral');
+                    const angle = (workerIndex * Math.PI * 2 / 4) + (Math.PI / 4); // Spread in 4 positions
+                    const offsetRadius = 1.5;
+                    targetX = patch.x + Math.cos(angle) * offsetRadius;
+                    targetZ = patch.z + Math.sin(angle) * offsetRadius;
+                }
+            } else if (unit.state === 'harvesting_gas') {
+                const geyser = gameState.gasGeysers.find(g => g.id === unit.targetResource);
+                if (geyser) {
+                    // Calculate offset position around the geyser
+                    const workerIndex = this.getWorkerIndexAtResource(unit.id, unit.targetResource, 'gas');
+                    const angle = (workerIndex * Math.PI * 2 / 3); // Spread in 3 positions
+                    const offsetRadius = 2.0;
+                    targetX = geyser.x + Math.cos(angle) * offsetRadius;
+                    targetZ = geyser.z + Math.sin(angle) * offsetRadius;
+                }
+            } else if (unit.state === 'moving' && unit.targetX !== undefined) {
+                targetX = unit.targetX;
+                targetZ = unit.targetZ;
+            }
 
-                    if (distance > 1) {
-                        const speed = 3;
-                        unit.x += (dx / distance) * speed * deltaTime;
-                        unit.z += (dz / distance) * speed * deltaTime;
+            // Move towards target if one exists
+            if (targetX !== null && targetZ !== null) {
+                let dx = targetX - unit.x;
+                let dz = targetZ - unit.z;
 
-                        // Update renderer
-                        this.unitRenderer.updateUnitPosition(unit.id, unit.x, unit.z);
+                // Add separation from other workers
+                gameState.units.forEach(other => {
+                    if (other.id === unit.id || other.type !== 'worker') return;
+                    const sepX = unit.x - other.x;
+                    const sepZ = unit.z - other.z;
+                    const sepDist = Math.sqrt(sepX * sepX + sepZ * sepZ);
+                    if (sepDist < workerRadius * 2 && sepDist > 0.01) {
+                        dx += (sepX / sepDist) * separationForce * deltaTime;
+                        dz += (sepZ / sepDist) * separationForce * deltaTime;
+                    }
+                });
+
+                const distance = Math.sqrt(dx * dx + dz * dz);
+
+                if (distance > 0.3) {
+                    const moveSpeed = Math.min(speed * deltaTime, distance);
+                    unit.x += (dx / distance) * moveSpeed;
+                    unit.z += (dz / distance) * moveSpeed;
+                    this.unitRenderer?.updateUnitPosition(unit.id, unit.x, unit.z);
+                } else {
+                    // Arrived at destination
+                    if (unit.state === 'moving') {
+                        unit.state = 'idle';
+                        unit.targetX = undefined;
+                        unit.targetZ = undefined;
                     }
                 }
             }
         });
+    }
+
+    getWorkerIndexAtResource(workerId, resourceId, resourceType) {
+        const workerList = resourceType === 'gas' ? gameState.gasWorkers : gameState.mineralWorkers;
+        const workersAtResource = workerList.filter(id => {
+            const w = gameState.units.find(u => u.id === id);
+            return w && w.targetResource === resourceId;
+        });
+        return workersAtResource.indexOf(workerId);
     }
 
     render() {

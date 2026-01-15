@@ -30,7 +30,7 @@ export class GameActions {
         }
     }
 
-    buildStructure(buildingType) {
+    buildStructure(buildingType, manualPosition = null) {
         const result = { success: false, message: '' };
         const faction = gameState.faction;
 
@@ -39,11 +39,14 @@ export class GameActions {
             return result;
         }
 
+        // Normalize the building type to lowercase for switch matching
+        const normalizedType = buildingType.toLowerCase();
         let buildingConfig;
-        let placement = { x: 0, z: 0 };
+        let placement = manualPosition ? { x: manualPosition.x, z: manualPosition.z } : { x: 0, z: 0 };
+        const useAutoPlacement = !manualPosition;
 
         // Get building configuration
-        switch (buildingType) {
+        switch (normalizedType) {
             case 'supply':
             case 'supplydepot':
             case 'pylon':
@@ -54,28 +57,34 @@ export class GameActions {
                     return this.produceOverlord();
                 }
                 buildingConfig = faction.buildings.supply || faction.supplyUnit;
-                // Place supply buildings in a grid pattern
-                const supplyCount = gameState.getBuildingsByType('supply').length;
-                placement.x = 15 + (supplyCount % 3) * 4;
-                placement.z = -10 + Math.floor(supplyCount / 3) * 4;
+                // Auto-place supply buildings in a grid pattern
+                if (useAutoPlacement) {
+                    const supplyCount = gameState.getBuildingsByType('supply').length;
+                    placement.x = 15 + (supplyCount % 3) * 4;
+                    placement.z = -10 + Math.floor(supplyCount / 3) * 4;
+                }
                 break;
 
             case 'barracks':
             case 'spawningpool':
             case 'gateway':
                 buildingConfig = faction.buildings.barracks;
-                const barracksCount = gameState.getBuildingsByType('barracks').length;
-                placement.x = -15 - barracksCount * 5;
-                placement.z = 5;
+                if (useAutoPlacement) {
+                    const barracksCount = gameState.getBuildingsByType('barracks').length;
+                    placement.x = -15 - barracksCount * 5;
+                    placement.z = 5;
+                }
                 break;
 
             case 'factory':
             case 'roachwarren':
             case 'roboticsfacility':
                 buildingConfig = faction.buildings.factory;
-                const factoryCount = gameState.getBuildingsByType('factory').length;
-                placement.x = -15 - factoryCount * 5;
-                placement.z = -5;
+                if (useAutoPlacement) {
+                    const factoryCount = gameState.getBuildingsByType('factory').length;
+                    placement.x = -15 - factoryCount * 5;
+                    placement.z = -5;
+                }
                 break;
 
             case 'gasextractor':
@@ -83,26 +92,46 @@ export class GameActions {
             case 'refinery':
             case 'assimilator':
                 buildingConfig = faction.buildings.gasExtractor;
-                // Find a geyser without extractor AND not already building
+                // Gas extractors MUST be placed on a geyser
+                // Find nearest geyser to click position (manual) or first available (auto)
                 const occupiedGeysers = gameState.buildings
                     .filter(b => ['gasextractor', 'extractor', 'refinery', 'assimilator'].includes(b.type?.toLowerCase()))
                     .map(b => ({ x: b.x, z: b.z }));
 
-                const availableGeyser = gameState.gasGeysers.find(g => {
-                    if (g.hasExtractor) return false;
-                    // Check if already building on this geyser
-                    const isOccupied = occupiedGeysers.some(
-                        b => Math.abs(b.x - g.x) < 2 && Math.abs(b.z - g.z) < 2
-                    );
-                    return !isOccupied;
-                });
+                let targetGeyser;
+                if (manualPosition) {
+                    // Find geyser closest to click position
+                    targetGeyser = gameState.gasGeysers
+                        .filter(g => {
+                            if (g.hasExtractor) return false;
+                            const isOccupied = occupiedGeysers.some(
+                                b => Math.abs(b.x - g.x) < 2 && Math.abs(b.z - g.z) < 2
+                            );
+                            return !isOccupied;
+                        })
+                        .reduce((closest, g) => {
+                            const dist = Math.sqrt(Math.pow(g.x - manualPosition.x, 2) + Math.pow(g.z - manualPosition.z, 2));
+                            if (!closest || dist < closest.dist) {
+                                return { geyser: g, dist };
+                            }
+                            return closest;
+                        }, null)?.geyser;
+                } else {
+                    targetGeyser = gameState.gasGeysers.find(g => {
+                        if (g.hasExtractor) return false;
+                        const isOccupied = occupiedGeysers.some(
+                            b => Math.abs(b.x - g.x) < 2 && Math.abs(b.z - g.z) < 2
+                        );
+                        return !isOccupied;
+                    });
+                }
 
-                if (!availableGeyser) {
+                if (!targetGeyser) {
                     result.message = 'No available gas geysers';
                     return result;
                 }
-                placement.x = availableGeyser.x;
-                placement.z = availableGeyser.z;
+                placement.x = targetGeyser.x;
+                placement.z = targetGeyser.z;
                 break;
 
             default:

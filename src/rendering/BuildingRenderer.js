@@ -1,13 +1,33 @@
 /**
- * Building Rendering
+ * Building Rendering using GLTF Models
  */
 
 import * as THREE from 'three';
+import { modelLoader } from './ModelLoader.js';
 
+// Faction-specific colors
 const FACTION_COLORS = {
     zerg: { primary: 0x8b00ff, secondary: 0x4a0080, emissive: 0x440088 },
     human: { primary: 0x00aaff, secondary: 0x004488, emissive: 0x003366 },
     protoss: { primary: 0xffcc00, secondary: 0x886600, emissive: 0x664400 }
+};
+
+// Model paths for buildings
+const BUILDING_MODELS = {
+    base: '/models/buildings/base.glb',
+    supply: '/models/buildings/supply.glb',
+    barracks: '/models/buildings/barracks.glb',
+    factory: '/models/buildings/factory.glb',
+    gasExtractor: '/models/buildings/gasextractor.glb'
+};
+
+// Model scales
+const BUILDING_SCALES = {
+    base: 3.5,
+    supply: 2.0,
+    barracks: 2.5,
+    factory: 2.8,
+    gasExtractor: 4.0
 };
 
 export class BuildingRenderer {
@@ -16,310 +36,96 @@ export class BuildingRenderer {
         this.faction = faction;
         this.buildings = new Map();
         this.colors = FACTION_COLORS[faction.id] || FACTION_COLORS.human;
+
+        // Preload building models
+        this.preloadModels();
+    }
+
+    async preloadModels() {
+        const modelsToLoad = Object.values(BUILDING_MODELS);
+        await modelLoader.preloadModels(modelsToLoad);
+        console.log('[BuildingRenderer] Models preloaded');
     }
 
     createBuilding(buildingData) {
         console.log('[BuildingRenderer] createBuilding:', buildingData);
-        let building;
 
-        switch (buildingData.type) {
-            case 'base':
-                building = this.createBase(buildingData);
-                break;
-            case 'supply':
-                building = this.createSupply(buildingData);
-                break;
-            case 'gasExtractor':
-                building = this.createGasExtractor(buildingData);
-                break;
-            case 'barracks':
-                building = this.createProductionBuilding(buildingData, 'barracks');
-                break;
-            case 'factory':
-                building = this.createProductionBuilding(buildingData, 'factory');
-                break;
-            default:
-                building = this.createGenericBuilding(buildingData);
-        }
+        const group = new THREE.Group();
+        group.position.set(buildingData.x, 0, buildingData.z);
+        group.userData.buildingData = buildingData;
 
-        building.position.set(buildingData.x, 0, buildingData.z);
-        building.userData.buildingData = buildingData;
+        // Load the appropriate model asynchronously
+        this.loadBuildingModel(group, buildingData.type);
 
         // Add construction overlay if not complete
         if (!buildingData.isComplete) {
             const overlay = this.createConstructionOverlay(buildingData);
-            building.add(overlay);
-            building.userData.constructionOverlay = overlay;
+            group.add(overlay);
+            group.userData.constructionOverlay = overlay;
         }
 
-        this.scene.addObject(buildingData.id, building);
-        this.buildings.set(buildingData.id, building);
+        this.scene.addObject(buildingData.id, group);
+        this.buildings.set(buildingData.id, group);
 
-        return building;
+        return group;
     }
 
-    createBase(data) {
-        const group = new THREE.Group();
+    async loadBuildingModel(group, type) {
+        // Normalize building type
+        const typeMap = {
+            'base': 'base',
+            'hatchery': 'base',
+            'nexus': 'base',
+            'commandcenter': 'base',
+            'supply': 'supply',
+            'supplydepot': 'supply',
+            'pylon': 'supply',
+            'barracks': 'barracks',
+            'spawningpool': 'barracks',
+            'gateway': 'barracks',
+            'factory': 'factory',
+            'roachwarren': 'factory',
+            'roboticsfacility': 'factory',
+            'gasextractor': 'gasExtractor',
+            'extractor': 'gasExtractor',
+            'refinery': 'gasExtractor',
+            'assimilator': 'gasExtractor'
+        };
 
-        if (this.faction.id === 'zerg') {
-            // Hatchery - organic, oval shape
-            const baseGeometry = new THREE.SphereGeometry(4, 16, 12);
-            baseGeometry.scale(1.2, 0.5, 1);
-            const baseMaterial = new THREE.MeshStandardMaterial({
-                color: this.colors.primary,
-                roughness: 0.7,
-                metalness: 0.1,
-                emissive: this.colors.emissive,
-                emissiveIntensity: 0.3
-            });
-            const base = new THREE.Mesh(baseGeometry, baseMaterial);
-            base.position.y = 1;
-            base.castShadow = true;
-            group.add(base);
+        const normalizedType = typeMap[type.toLowerCase()] || type;
+        const modelPath = BUILDING_MODELS[normalizedType] || BUILDING_MODELS.base;
+        const scale = BUILDING_SCALES[normalizedType] || 2.0;
 
-            // Central spawning pool
-            const poolGeometry = new THREE.CylinderGeometry(1.5, 1.5, 0.5, 16);
-            const poolMaterial = new THREE.MeshBasicMaterial({
-                color: 0x44ff44,
-                transparent: true,
-                opacity: 0.7
-            });
-            const pool = new THREE.Mesh(poolGeometry, poolMaterial);
-            pool.position.y = 1.3;
-            group.add(pool);
+        try {
+            const model = await modelLoader.load(modelPath);
+            model.scale.setScalar(scale);
+            modelLoader.applyFactionColor(model, this.colors.primary);
 
-        } else if (this.faction.id === 'protoss') {
-            // Nexus - crystalline, pyramidal
-            const baseGeometry = new THREE.CylinderGeometry(3, 4, 3, 6);
-            const baseMaterial = new THREE.MeshStandardMaterial({
-                color: this.colors.primary,
-                roughness: 0.2,
-                metalness: 0.7,
-                emissive: this.colors.emissive,
-                emissiveIntensity: 0.4
-            });
-            const base = new THREE.Mesh(baseGeometry, baseMaterial);
-            base.position.y = 1.5;
-            base.castShadow = true;
-            group.add(base);
+            // Center the model within the group so construction overlay aligns
+            const box = new THREE.Box3().setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            model.position.x -= center.x;
+            model.position.z -= center.z;
 
-            // Central pylon crystal
-            const crystalGeometry = new THREE.OctahedronGeometry(1.5, 0);
-            const crystalMaterial = new THREE.MeshStandardMaterial({
-                color: 0x00ffff,
-                roughness: 0.1,
-                metalness: 0.9,
-                emissive: 0x00aaaa,
-                emissiveIntensity: 0.8,
-                transparent: true,
-                opacity: 0.9
-            });
-            const crystal = new THREE.Mesh(crystalGeometry, crystalMaterial);
-            crystal.position.y = 4;
-            crystal.castShadow = true;
-            group.add(crystal);
-
-        } else {
-            // Command Center - industrial, rectangular
-            const baseGeometry = new THREE.BoxGeometry(6, 2, 5);
-            const baseMaterial = new THREE.MeshStandardMaterial({
-                color: 0x4a5568,
-                roughness: 0.6,
-                metalness: 0.4
-            });
-            const base = new THREE.Mesh(baseGeometry, baseMaterial);
-            base.position.y = 1;
-            base.castShadow = true;
-            group.add(base);
-
-            // Control tower
-            const towerGeometry = new THREE.BoxGeometry(2, 3, 2);
-            const tower = new THREE.Mesh(towerGeometry, baseMaterial);
-            tower.position.set(1, 3.5, 0);
-            tower.castShadow = true;
-            group.add(tower);
-
-            // Antenna
-            const antennaGeometry = new THREE.CylinderGeometry(0.1, 0.1, 2, 8);
-            const antennaMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
-            const antenna = new THREE.Mesh(antennaGeometry, antennaMaterial);
-            antenna.position.set(1, 6, 0);
-            group.add(antenna);
-
-            // Blue accent lights
-            const lightMaterial = new THREE.MeshBasicMaterial({ color: this.colors.primary });
-            const light1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 2), lightMaterial);
-            light1.position.set(-2.5, 2.1, 0);
-            group.add(light1);
+            group.add(model);
+        } catch (error) {
+            console.warn(`[BuildingRenderer] Failed to load building model ${type} (normalized: ${normalizedType}):`, error);
+            group.add(this.createFallbackBuilding(normalizedType));
         }
-
-        return group;
     }
 
-    createSupply(data) {
-        const group = new THREE.Group();
-
-        if (this.faction.id === 'zerg') {
-            // Overlord would be a unit, but for building version
-            const bodyGeometry = new THREE.SphereGeometry(2, 12, 10);
-            bodyGeometry.scale(1, 0.6, 1);
-            const bodyMaterial = new THREE.MeshStandardMaterial({
-                color: this.colors.primary,
-                roughness: 0.6,
-                metalness: 0.1,
-                emissive: this.colors.emissive,
-                emissiveIntensity: 0.3
-            });
-            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-            body.position.y = 2;
-            body.castShadow = true;
-            group.add(body);
-
-        } else if (this.faction.id === 'protoss') {
-            // Pylon
-            const pylonGeometry = new THREE.CylinderGeometry(0.5, 1.5, 4, 6);
-            const pylonMaterial = new THREE.MeshStandardMaterial({
-                color: this.colors.primary,
-                roughness: 0.2,
-                metalness: 0.7,
-                emissive: this.colors.emissive,
-                emissiveIntensity: 0.5
-            });
-            const pylon = new THREE.Mesh(pylonGeometry, pylonMaterial);
-            pylon.position.y = 2;
-            pylon.castShadow = true;
-            group.add(pylon);
-
-            // Power field
-            const fieldGeometry = new THREE.RingGeometry(0, 4, 32);
-            const fieldMaterial = new THREE.MeshBasicMaterial({
-                color: 0x00ffff,
-                transparent: true,
-                opacity: 0.2,
-                side: THREE.DoubleSide
-            });
-            const field = new THREE.Mesh(fieldGeometry, fieldMaterial);
-            field.rotation.x = -Math.PI / 2;
-            field.position.y = 0.05;
-            group.add(field);
-
-        } else {
-            // Supply Depot
-            const depotGeometry = new THREE.BoxGeometry(2.5, 1.5, 2.5);
-            const depotMaterial = new THREE.MeshStandardMaterial({
-                color: 0x4a5568,
-                roughness: 0.6,
-                metalness: 0.4
-            });
-            const depot = new THREE.Mesh(depotGeometry, depotMaterial);
-            depot.position.y = 0.75;
-            depot.castShadow = true;
-            group.add(depot);
-
-            // Accent stripe
-            const stripeGeometry = new THREE.BoxGeometry(2.6, 0.2, 0.5);
-            const stripeMaterial = new THREE.MeshBasicMaterial({ color: this.colors.primary });
-            const stripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
-            stripe.position.set(0, 1.4, 0);
-            group.add(stripe);
-        }
-
-        return group;
-    }
-
-    createGasExtractor(data) {
-        const group = new THREE.Group();
-
-        // Base structure
-        const baseGeometry = new THREE.CylinderGeometry(2.5, 3, 1.5, 8);
-        const baseMaterial = new THREE.MeshStandardMaterial({
-            color: 0x3a3a4a,
-            roughness: 0.7,
-            metalness: 0.3
-        });
-        const base = new THREE.Mesh(baseGeometry, baseMaterial);
-        base.position.y = 0.75;
-        base.castShadow = true;
-        group.add(base);
-
-        // Extraction pipe
-        const pipeGeometry = new THREE.CylinderGeometry(0.8, 0.8, 3, 12);
-        const pipeMaterial = new THREE.MeshStandardMaterial({
-            color: this.colors.secondary,
-            roughness: 0.4,
-            metalness: 0.6
-        });
-        const pipe = new THREE.Mesh(pipeGeometry, pipeMaterial);
-        pipe.position.y = 3;
-        pipe.castShadow = true;
-        group.add(pipe);
-
-        // Green gas glow
-        const glowGeometry = new THREE.CylinderGeometry(0.6, 0.6, 2, 12);
-        const glowMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ff88,
-            transparent: true,
-            opacity: 0.6
-        });
-        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-        glow.position.y = 3;
-        group.add(glow);
-
-        return group;
-    }
-
-    createProductionBuilding(data, type) {
-        const group = new THREE.Group();
-
-        const isBarracks = type === 'barracks';
-        const size = isBarracks ? { w: 4, h: 2.5, d: 3.5 } : { w: 4.5, h: 3, d: 4 };
-
-        // Main structure
-        const buildingGeometry = new THREE.BoxGeometry(size.w, size.h, size.d);
-        const buildingMaterial = new THREE.MeshStandardMaterial({
-            color: 0x4a5568,
-            roughness: 0.6,
-            metalness: 0.4
-        });
-        const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-        building.position.y = size.h / 2;
-        building.castShadow = true;
-        group.add(building);
-
-        // Faction accent
-        const accentGeometry = new THREE.BoxGeometry(size.w + 0.1, 0.3, 0.5);
-        const accentMaterial = new THREE.MeshBasicMaterial({ color: this.colors.primary });
-        const accent = new THREE.Mesh(accentGeometry, accentMaterial);
-        accent.position.set(0, size.h, 0);
-        group.add(accent);
-
-        // Door / entrance
-        const doorGeometry = new THREE.BoxGeometry(1.5, 2, 0.1);
-        const doorMaterial = new THREE.MeshBasicMaterial({
-            color: 0x222222
-        });
-        const door = new THREE.Mesh(doorGeometry, doorMaterial);
-        door.position.set(0, 1, size.d / 2 + 0.05);
-        group.add(door);
-
-        return group;
-    }
-
-    createGenericBuilding(data) {
-        const group = new THREE.Group();
-
-        const buildingGeometry = new THREE.BoxGeometry(3, 2, 3);
-        const buildingMaterial = new THREE.MeshStandardMaterial({
+    createFallbackBuilding(type) {
+        // Simple procedural fallback
+        const size = type === 'base' ? 4 : 2;
+        const geometry = new THREE.BoxGeometry(size, size, size);
+        const material = new THREE.MeshStandardMaterial({
             color: this.colors.secondary,
             roughness: 0.5,
             metalness: 0.3
         });
-        const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-        building.position.y = 1;
-        building.castShadow = true;
-        group.add(building);
-
-        return group;
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.y = size / 2;
+        return mesh;
     }
 
     createConstructionOverlay(data) {
@@ -337,7 +143,7 @@ export class BuildingRenderer {
         wire.position.y = 2;
         group.add(wire);
 
-        // Progress bar background
+        // Progress bar background (Floating above building)
         const barBgGeometry = new THREE.PlaneGeometry(4, 0.3);
         const barBgMaterial = new THREE.MeshBasicMaterial({
             color: 0x333333,
@@ -346,8 +152,8 @@ export class BuildingRenderer {
             side: THREE.DoubleSide
         });
         const barBg = new THREE.Mesh(barBgGeometry, barBgMaterial);
-        barBg.position.set(0, 5, 0);
-        barBg.lookAt(new THREE.Vector3(0, 5, 10)); // Face camera roughly
+        barBg.position.set(0, 7, 0);
+        barBg.rotation.x = -Math.PI / 4; // Tilt towards camera
         group.add(barBg);
 
         // Progress bar fill
@@ -359,8 +165,9 @@ export class BuildingRenderer {
             side: THREE.DoubleSide
         });
         const barFill = new THREE.Mesh(barFillGeometry, barFillMaterial);
-        barFill.position.set(0, 5, 0.01);
-        barFill.scale.x = 0.01; // Start empty
+        barFill.position.set(0, 7, 0.01);
+        barFill.rotation.x = -Math.PI / 4;
+        barFill.scale.x = 0.01;
         barFill.userData.isProgressBar = true;
         group.add(barFill);
 
@@ -380,7 +187,7 @@ export class BuildingRenderer {
             transparent: true
         });
         const timerSprite = new THREE.Sprite(timerMaterial);
-        timerSprite.position.set(0, 6, 0);
+        timerSprite.position.set(0, 8, 0);
         timerSprite.scale.set(2, 1, 1);
         timerSprite.userData.isTimer = true;
         timerSprite.userData.canvas = canvas;
@@ -399,7 +206,7 @@ export class BuildingRenderer {
                 // Update progress bar
                 if (child.userData?.isProgressBar) {
                     child.scale.x = Math.max(0.01, progress);
-                    child.position.x = -1.95 + (progress * 1.95); // Slide from left
+                    child.position.x = -1.95 + (progress * 1.95);
                 }
 
                 // Update timer text
@@ -422,8 +229,8 @@ export class BuildingRenderer {
             });
 
             // Adjust building opacity based on progress
-            building.children.forEach(child => {
-                if (child !== overlay && child.material) {
+            building.traverse(child => {
+                if (child.isMesh && child.material && !child.userData?.isProgressBar && !child.userData?.isTimer) {
                     if (child.material.transparent === undefined) {
                         child.material.transparent = true;
                     }
@@ -435,10 +242,24 @@ export class BuildingRenderer {
 
     completeConstruction(buildingId) {
         const building = this.buildings.get(buildingId);
+
         if (building && building.userData.constructionOverlay) {
-            building.remove(building.userData.constructionOverlay);
+            const overlay = building.userData.constructionOverlay;
+            building.remove(overlay);
+            this.scene.disposeObject(overlay);
             building.userData.constructionOverlay = null;
             building.userData.buildingData.isComplete = true;
+
+            // Reset opacity
+            building.traverse(child => {
+                if (child.isMesh && child.material && !child.userData?.isProgressBar && !child.userData?.isTimer) {
+                    if (child.material.transparent) {
+                        child.material.opacity = 1.0;
+                    }
+                }
+            });
+        } else {
+            console.warn('[BuildingRenderer] Could not complete construction - building or overlay not found');
         }
     }
 
@@ -452,16 +273,7 @@ export class BuildingRenderer {
 
     animateBuildings(time) {
         this.buildings.forEach((group, id) => {
-            // Animate Protoss pylons
-            if (this.faction.id === 'protoss' && group.userData.buildingData?.type === 'supply') {
-                group.children.forEach(child => {
-                    if (child.geometry?.type === 'RingGeometry') {
-                        child.material.opacity = 0.15 + Math.sin(time * 2) * 0.1;
-                    }
-                });
-            }
-
-            // Animate construction
+            // Animate construction overlay rotation
             if (group.userData.constructionOverlay) {
                 group.userData.constructionOverlay.rotation.y = time;
             }

@@ -245,6 +245,7 @@ class GameState {
     gatherResources(deltaTime) {
         const miningRate = 5; // minerals per second per worker
         const gasRate = 4; // gas per second per worker
+        const gatherRange = 2; // Must be within this distance to gather
 
         // Mineral gathering
         this.mineralWorkers.forEach(workerId => {
@@ -252,9 +253,16 @@ class GameState {
             if (worker && worker.state === 'mining') {
                 const patch = this.mineralPatches.find(p => p.id === worker.targetResource);
                 if (patch && patch.amount > 0) {
-                    const gathered = Math.min(miningRate * deltaTime, patch.amount);
-                    patch.amount -= gathered;
-                    this.minerals += gathered;
+                    // Check if worker is close enough to gather
+                    const dx = patch.x - worker.x;
+                    const dz = patch.z - worker.z;
+                    const distance = Math.sqrt(dx * dx + dz * dz);
+
+                    if (distance <= gatherRange) {
+                        const gathered = Math.min(miningRate * deltaTime, patch.amount);
+                        patch.amount -= gathered;
+                        this.minerals += gathered;
+                    }
                 } else {
                     // Find another patch
                     worker.state = 'idle';
@@ -269,9 +277,16 @@ class GameState {
             if (worker && worker.state === 'harvesting_gas') {
                 const geyser = this.gasGeysers.find(g => g.id === worker.targetResource);
                 if (geyser && geyser.amount > 0 && geyser.hasExtractor) {
-                    const gathered = Math.min(gasRate * deltaTime, geyser.amount);
-                    geyser.amount -= gathered;
-                    this.gas += gathered;
+                    // Check if worker is close enough to gather
+                    const dx = geyser.x - worker.x;
+                    const dz = geyser.z - worker.z;
+                    const distance = Math.sqrt(dx * dx + dz * dz);
+
+                    if (distance <= gatherRange) {
+                        const gathered = Math.min(gasRate * deltaTime, geyser.amount);
+                        geyser.amount -= gathered;
+                        this.gas += gathered;
+                    }
                 }
             }
         });
@@ -314,7 +329,8 @@ class GameState {
         this.productionQueue.forEach(item => {
             item.progress += deltaTime;
 
-            if (item.progress >= item.buildTime) {
+            // Use small tolerance to avoid floating point issues
+            if (item.progress >= item.buildTime - 0.01) {
                 completed.push(item);
             }
         });

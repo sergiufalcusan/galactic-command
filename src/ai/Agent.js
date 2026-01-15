@@ -324,6 +324,69 @@ Current game state:
     reset() {
         this.conversationHistory = [];
     }
+
+    // Notify AI of player's manual action for feedback
+    async notifyPlayerAction(actionType, details) {
+        // Don't interrupt if already processing
+        if (this.isProcessing) return null;
+
+        const actionDescriptions = {
+            'build': `The player just built a ${details.buildingName || details.type}`,
+            'mine_minerals': `The player assigned ${details.count || 1} worker(s) to mine minerals`,
+            'harvest_gas': `The player assigned ${details.count || 1} worker(s) to harvest vespene gas`,
+            'move_units': `The player moved ${details.count || 1} unit(s) to a new location`,
+            'produce_unit': `The player started producing a ${details.unitType || 'unit'}`
+        };
+
+        const actionDescription = actionDescriptions[actionType] || `The player performed: ${actionType}`;
+
+        // Quick local response based on faction personality (no API call needed for quick feedback)
+        const quickResponses = this.getQuickFeedback(actionType, details);
+        if (quickResponses) {
+            const response = quickResponses[Math.floor(Math.random() * quickResponses.length)];
+            this.voice.speak(response);
+            return { text: response, actions: [] };
+        }
+
+        return null;
+    }
+
+    getQuickFeedback(actionType, details) {
+        const factionId = this.faction.id;
+
+        const responses = {
+            zerg: {
+                'build': ['The Swarm grows! Excellent...', 'Yesss... expansion pleases us!', 'More structures for the hive!'],
+                'mine_minerals': ['Feed the Swarm! More minerals!', 'The drones obey... GOOD.', 'Essence shall flow!'],
+                'harvest_gas': ['The gas feeds our evolution!', 'Vespene... we hunger for its power!', 'The extractors serve us well!'],
+                'move_units': ['The Swarm moves as one!', 'We spread across the land...', 'Nothing escapes our reach!'],
+                'produce_unit': ['Another joins the endless Swarm!', 'More for the hive!', 'We grow STRONGER!']
+            },
+            human: {
+                'build': ['Copy that, structure going up.', 'Not bad, rookie. Keep it up.', 'Construction initiated. Finally.'],
+                'mine_minerals': ['Workers assigned. Smart move.', 'Good call on the minerals.', 'Roger, workers are on it.'],
+                'harvest_gas': ['Gas operations underway.', 'About time we got that gas flowing.', 'Refinery operations confirmed.'],
+                'move_units': ['Units repositioned.', 'Movement orders received.', 'Copy that, units en route.'],
+                'produce_unit': ['Training in progress.', 'New recruit incoming.', 'Unit production authorized.']
+            },
+            protoss: {
+                'build': ['En taro Adun! A wise construction.', 'The light of Aiur guides your hand.', 'A noble structure rises!'],
+                'mine_minerals': ['The Probes serve with honor.', 'Resources flow for our glory!', 'By your will, Executor.'],
+                'harvest_gas': ['Vespene shall fuel our triumph!', 'The Assimilator hums with purpose.', 'Blessed be this harvest!'],
+                'move_units': ['Our warriors move with purpose.', 'The Khala guides their path.', 'A tactical repositioning!'],
+                'produce_unit': ['A new warrior is forged!', 'Strength joins our ranks!', 'For Aiur, another defender rises!']
+            }
+        };
+
+        return responses[factionId]?.[actionType];
+    }
+
+    dispose() {
+        this.reset();
+        if (this.voice) {
+            this.voice.dispose();
+        }
+    }
 }
 
 export default AIAgent;
