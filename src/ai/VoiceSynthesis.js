@@ -3,8 +3,11 @@
  * Provides text-to-speech for AI agents with faction-specific voices
  */
 
-// ElevenLabs API configuration
-const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
+// ElevenLabs API configuration - use backend proxy in production
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const ELEVENLABS_API_URL = API_BASE_URL
+    ? `${API_BASE_URL}/api/elevenlabs/tts`
+    : 'https://api.elevenlabs.io/v1/text-to-speech';
 
 // Recommended ElevenLabs voice IDs for each faction
 // Users can customize these in settings
@@ -131,12 +134,17 @@ export class VoiceSynthesis {
         const url = `${ELEVENLABS_API_URL}/${this.voiceId}`;
         console.log('[Voice] Calling ElevenLabs API:', url);
 
+        // Build headers - only include API key if not using proxy
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (!API_BASE_URL && this.apiKey) {
+            headers['xi-api-key'] = this.apiKey;
+        }
+
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'xi-api-key': this.apiKey
-            },
+            headers,
             body: JSON.stringify({
                 text: text,
                 model_id: 'eleven_turbo_v2_5',

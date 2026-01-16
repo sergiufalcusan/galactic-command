@@ -122,6 +122,116 @@ export class HUD {
         this.actionButtons.appendChild(btn);
     }
 
+    showBuildingSelection(building, onTrainUnit) {
+        if (!building) {
+            this.showSelection(null);
+            return;
+        }
+
+        this.selectedInfo.querySelector('.selected-name').textContent = building.name || building.type;
+        this.actionButtons.innerHTML = '';
+
+        // Get faction data for production options
+        const faction = gameState.faction;
+        if (!faction) return;
+
+        // Determine what units this building can produce
+        let trainableUnits = [];
+
+        const buildingType = building.type?.toLowerCase();
+
+        // Base buildings can train workers
+        if (buildingType === 'base') {
+            trainableUnits.push({
+                key: 'worker',
+                data: faction.worker,
+                icon: '👷'
+            });
+        }
+
+        // Barracks/Gateway/Spawning Pool can train basic combat units
+        if (buildingType === 'barracks') {
+            const barracksData = faction.buildings.barracks;
+            if (barracksData?.unlocks) {
+                barracksData.unlocks.forEach(unitKey => {
+                    const unitData = faction.units[unitKey];
+                    if (unitData) {
+                        trainableUnits.push({
+                            key: unitKey,
+                            data: unitData,
+                            icon: this.getUnitIcon(unitKey)
+                        });
+                    }
+                });
+            }
+        }
+
+        // Factory can train advanced units
+        if (buildingType === 'factory') {
+            const factoryData = faction.buildings.factory;
+            if (factoryData?.unlocks) {
+                factoryData.unlocks.forEach(unitKey => {
+                    const unitData = faction.units[unitKey];
+                    if (unitData) {
+                        trainableUnits.push({
+                            key: unitKey,
+                            data: unitData,
+                            icon: this.getUnitIcon(unitKey)
+                        });
+                    }
+                });
+            }
+        }
+
+        // Only show production buttons if building is complete
+        if (building.isComplete && trainableUnits.length > 0) {
+            trainableUnits.forEach(unit => {
+                const cost = unit.data.cost;
+                const costText = `${cost.minerals}m${cost.gas > 0 ? ` ${cost.gas}g` : ''}`;
+                this.addProductionButton(
+                    unit.icon,
+                    `Train ${unit.data.name} (${costText})`,
+                    () => onTrainUnit(unit.key)
+                );
+            });
+        } else if (!building.isComplete) {
+            const note = document.createElement('div');
+            note.className = 'building-note';
+            note.textContent = 'Under Construction...';
+            note.style.cssText = 'color: #ffcc00; font-size: 0.8rem; padding: 8px;';
+            this.actionButtons.appendChild(note);
+        }
+    }
+
+    addProductionButton(icon, tooltip, onClick) {
+        const btn = document.createElement('button');
+        btn.className = 'action-btn production-btn';
+        btn.innerHTML = icon;
+        btn.title = tooltip;
+        btn.addEventListener('click', onClick);
+        this.actionButtons.appendChild(btn);
+    }
+
+    getUnitIcon(unitKey) {
+        const icons = {
+            // Human
+            marine: '🔫',
+            marauder: '💪',
+            hellion: '🔥',
+            // Zerg
+            zergling: '🐛',
+            roach: '🪲',
+            hydralisk: '🐍',
+            // Protoss
+            zealot: '⚔️',
+            stalker: '🎯',
+            immortal: '🛡️',
+            // Generic
+            worker: '👷'
+        };
+        return icons[unitKey] || '⚙️';
+    }
+
     showNotification(message) {
         const notification = document.createElement('div');
         notification.className = 'hud-notification';

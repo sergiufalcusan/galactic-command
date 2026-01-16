@@ -30,10 +30,10 @@ const COMBAT_MODELS = {
 // Model scales (may need adjustment)
 const MODEL_SCALES = {
     worker: 1.5,
-    marine: 0.8,
-    zergling: 0.8,
-    zealot: 0.8,
-    overlord: 1.2
+    marine: 1.5,
+    zergling: 1.5,
+    zealot: 1.5,
+    overlord: 1.8
 };
 
 export class UnitRenderer {

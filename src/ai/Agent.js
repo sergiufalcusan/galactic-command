@@ -6,8 +6,11 @@ import { getRandomGreeting, getRandomResponse } from '../game/Faction.js';
 import gameState from '../game/GameState.js';
 import VoiceSynthesis from './VoiceSynthesis.js';
 
-// OpenAI API configuration
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+// OpenAI API configuration - use backend proxy in production to avoid CORS
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const OPENAI_API_URL = API_BASE_URL
+    ? `${API_BASE_URL}/api/openai/chat/completions`
+    : 'https://api.openai.com/v1/chat/completions';
 
 export class AIAgent {
     constructor(faction, onAction) {
@@ -179,12 +182,20 @@ Current game state:
             ...this.conversationHistory.slice(-10) // Keep last 10 messages for context
         ];
 
+        // Build headers - only include Authorization if not using proxy
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+
+        // If using direct OpenAI URL (not proxy), include API key
+        if (!API_BASE_URL && this.apiKey) {
+            headers['Authorization'] = `Bearer ${this.apiKey}`;
+        }
+
+
         const response = await fetch(OPENAI_API_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`
-            },
+            headers,
             body: JSON.stringify({
                 model: 'gpt-4o-mini', // Cost-effective model
                 messages: messages,

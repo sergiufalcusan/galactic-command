@@ -6,11 +6,12 @@ import * as THREE from 'three';
 import gameState from '../game/GameState.js';
 
 export class InputHandler {
-    constructor(scene, camera, unitRenderer, terrainRenderer, onSelectionChange) {
+    constructor(scene, camera, unitRenderer, terrainRenderer, onSelectionChange, buildingRenderer = null) {
         this.scene = scene;
         this.camera = camera;
         this.unitRenderer = unitRenderer;
         this.terrainRenderer = terrainRenderer;
+        this.buildingRenderer = buildingRenderer;
         this.onSelectionChange = onSelectionChange;
         this.onPlayerAction = null; // Callback for AI feedback
 
@@ -18,6 +19,7 @@ export class InputHandler {
         this.mouse = new THREE.Vector2();
 
         this.selectedUnits = [];
+        this.selectedBuilding = null; // Track selected building
         this.isBoxSelecting = false;
         this.boxSelectStart = null;
 
@@ -94,19 +96,34 @@ export class InputHandler {
 
         this.updateMousePosition(event);
 
-        // Check for unit selection
+        // Check for unit selection first
         const unitObjects = this.getSelectableUnitObjects();
-        const intersects = this.raycast(unitObjects);
+        const unitIntersects = this.raycast(unitObjects);
 
         // Clear previous selection unless shift is held
         if (!event.shiftKey) {
             this.clearSelection();
         }
 
-        if (intersects.length > 0) {
-            const hitObject = this.findParentWithUserData(intersects[0].object);
+        if (unitIntersects.length > 0) {
+            const hitObject = this.findParentWithUserData(unitIntersects[0].object);
             if (hitObject && hitObject.userData.unitData) {
                 this.selectUnit(hitObject.userData.unitData.id);
+                this.notifySelectionChange();
+                return;
+            }
+        }
+
+        // Check for building selection
+        const buildingObjects = this.getSelectableBuildingObjects();
+        const buildingIntersects = this.raycast(buildingObjects);
+
+        if (buildingIntersects.length > 0) {
+            const hitObject = this.findParentWithUserData(buildingIntersects[0].object);
+            if (hitObject && hitObject.userData.buildingData) {
+                this.selectBuilding(hitObject.userData.buildingData.id);
+                this.notifySelectionChange();
+                return;
             }
         }
 
@@ -127,16 +144,17 @@ export class InputHandler {
             const clickPoint = intersects[0].point;
 
             if (hitObject) {
-                // Check if it's a mineral patch
-                if (hitObject.userData?.type === 'mineral' ||
-                    this.terrainRenderer.resourceNodes.get(hitObject.parent?.userData?.id)?.type === 'mineral') {
-                    this.commandMineMinerals();
+                // Check if it's a mineral patch - extract the resource ID
+                const resourceId = hitObject.userData?.id || hitObject.parent?.userData?.id;
+                const nodeData = this.terrainRenderer.resourceNodes.get(resourceId);
+
+                if (hitObject.userData?.type === 'mineral' || nodeData?.type === 'mineral') {
+                    this.commandMineMinerals(resourceId);
                     return;
                 }
                 // Check if it's a gas geyser
-                else if (hitObject.userData?.type === 'gas' ||
-                    this.terrainRenderer.resourceNodes.get(hitObject.parent?.userData?.id)?.type === 'gas') {
-                    this.commandHarvestGas();
+                else if (hitObject.userData?.type === 'gas' || nodeData?.type === 'gas') {
+                    this.commandHarvestGas(resourceId);
                     return;
                 }
             }
@@ -145,9 +163,9 @@ export class InputHandler {
             const nearbyResource = this.findNearbyResource(clickPoint.x, clickPoint.z);
             if (nearbyResource) {
                 if (nearbyResource.type === 'mineral') {
-                    this.commandMineMinerals();
+                    this.commandMineMinerals(nearbyResource.resource.id);
                 } else if (nearbyResource.type === 'gas') {
-                    this.commandHarvestGas();
+                    this.commandHarvestGas(nearbyResource.resource.id);
                 }
                 return;
             }
@@ -163,9 +181,9 @@ export class InputHandler {
                 const nearbyResource = this.findNearbyResource(point.x, point.z);
                 if (nearbyResource) {
                     if (nearbyResource.type === 'mineral') {
-                        this.commandMineMinerals();
+                        this.commandMineMinerals(nearbyResource.resource.id);
                     } else if (nearbyResource.type === 'gas') {
-                        this.commandHarvestGas();
+                        this.commandHarvestGas(nearbyResource.resource.id);
                     }
                     return;
                 }
@@ -317,6 +335,16 @@ export class InputHandler {
         return objects;
     }
 
+    getSelectableBuildingObjects() {
+        const objects = [];
+        if (this.buildingRenderer && this.buildingRenderer.buildings) {
+            this.buildingRenderer.buildings.forEach((group, id) => {
+                objects.push(group);
+            });
+        }
+        return objects;
+    }
+
     getTargetableObjects() {
         const objects = [];
 
@@ -330,9 +358,11 @@ export class InputHandler {
         });
 
         // Add buildings
-        this.unitRenderer?.buildings?.forEach((group, id) => {
-            objects.push(group);
-        });
+        if (this.buildingRenderer && this.buildingRenderer.buildings) {
+            this.buildingRenderer.buildings.forEach((group, id) => {
+                objects.push(group);
+            });
+        }
 
         return objects;
     }
@@ -349,6 +379,8 @@ export class InputHandler {
     }
 
     selectUnit(unitId) {
+        // Clear building selection when selecting units
+        this.clearBuildingSelection();
         if (!this.selectedUnits.includes(unitId)) {
             this.selectedUnits.push(unitId);
             this.unitRenderer.setSelected(unitId, true);
@@ -363,24 +395,57 @@ export class InputHandler {
         }
     }
 
-    clearSelection() {
+    selectBuilding(buildingId) {
+        // Clear unit selection when selecting a building
+        this.clearUnitSelection();
+        this.clearBuildingSelection();
+
+        this.selectedBuilding = buildingId;
+        if (this.buildingRenderer) {
+            this.buildingRenderer.setSelected(buildingId, true);
+        }
+    }
+
+    clearUnitSelection() {
         this.selectedUnits.forEach(unitId => {
             this.unitRenderer.setSelected(unitId, false);
         });
         this.selectedUnits = [];
     }
 
+    clearBuildingSelection() {
+        if (this.selectedBuilding && this.buildingRenderer) {
+            this.buildingRenderer.setSelected(this.selectedBuilding, false);
+        }
+        this.selectedBuilding = null;
+    }
+
+    clearSelection() {
+        this.clearUnitSelection();
+        this.clearBuildingSelection();
+    }
+
     notifySelectionChange() {
         if (this.onSelectionChange) {
+            // Check for building selection first
+            if (this.selectedBuilding) {
+                const building = gameState.buildings.find(b => b.id === this.selectedBuilding);
+                if (building) {
+                    this.onSelectionChange([building], 'building');
+                    return;
+                }
+            }
+
+            // Otherwise return unit selection
             const selectedData = this.selectedUnits.map(id =>
                 gameState.units.find(u => u.id === id)
             ).filter(Boolean);
-            this.onSelectionChange(selectedData);
+            this.onSelectionChange(selectedData, 'unit');
         }
     }
 
     // Commands
-    commandMineMinerals() {
+    commandMineMinerals(targetResourceId = null) {
         let assigned = 0;
         this.selectedUnits.forEach(unitId => {
             const unit = gameState.units.find(u => u.id === unitId);
@@ -388,7 +453,7 @@ export class InputHandler {
                 // Remove from gas workers if assigned there
                 gameState.gasWorkers = gameState.gasWorkers.filter(id => id !== unitId);
 
-                if (gameState.assignWorkerToMinerals(unitId)) {
+                if (gameState.assignWorkerToMinerals(unitId, targetResourceId)) {
                     assigned++;
                 }
             }
@@ -400,7 +465,7 @@ export class InputHandler {
         }
     }
 
-    commandHarvestGas() {
+    commandHarvestGas(targetResourceId = null) {
         let assigned = 0;
         this.selectedUnits.forEach(unitId => {
             const unit = gameState.units.find(u => u.id === unitId);
@@ -408,7 +473,7 @@ export class InputHandler {
                 // Remove from mineral workers if assigned there
                 gameState.mineralWorkers = gameState.mineralWorkers.filter(id => id !== unitId);
 
-                if (gameState.assignWorkerToGas(unitId)) {
+                if (gameState.assignWorkerToGas(unitId, targetResourceId)) {
                     assigned++;
                 }
             }

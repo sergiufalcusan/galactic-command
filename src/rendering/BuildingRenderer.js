@@ -57,6 +57,12 @@ export class BuildingRenderer {
         // Load the appropriate model asynchronously
         this.loadBuildingModel(group, buildingData.type);
 
+        // Add selection ring (hidden by default)
+        const selectionRing = this.createSelectionRing(buildingData.type);
+        selectionRing.visible = false;
+        group.add(selectionRing);
+        group.userData.selectionRing = selectionRing;
+
         // Add construction overlay if not complete
         if (!buildingData.isComplete) {
             const overlay = this.createConstructionOverlay(buildingData);
@@ -68,6 +74,29 @@ export class BuildingRenderer {
         this.buildings.set(buildingData.id, group);
 
         return group;
+    }
+
+    createSelectionRing(type) {
+        // Different sizes for different building types
+        const ringSize = type === 'base' ? 4 : 2.5;
+        const geometry = new THREE.RingGeometry(ringSize, ringSize + 0.3, 32);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x00ff00,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide
+        });
+        const ring = new THREE.Mesh(geometry, material);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.05;
+        return ring;
+    }
+
+    setSelected(buildingId, selected) {
+        const building = this.buildings.get(buildingId);
+        if (building && building.userData.selectionRing) {
+            building.userData.selectionRing.visible = selected;
+        }
     }
 
     async loadBuildingModel(group, type) {

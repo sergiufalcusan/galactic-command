@@ -209,32 +209,50 @@ class GameState {
     }
 
     // Worker assignment
-    assignWorkerToMinerals(workerId) {
+    assignWorkerToMinerals(workerId, targetResourceId = null) {
         const worker = this.units.find(u => u.id === workerId);
         if (worker && worker.type === 'worker') {
-            // Find nearest mineral patch with capacity
-            const availablePatch = this.mineralPatches.find(p => p.amount > 0);
-            if (availablePatch) {
+            // Find the specific patch or nearest available one
+            let targetPatch;
+            if (targetResourceId) {
+                targetPatch = this.mineralPatches.find(p => p.id === targetResourceId && p.amount > 0);
+            }
+            if (!targetPatch) {
+                targetPatch = this.mineralPatches.find(p => p.amount > 0);
+            }
+
+            if (targetPatch) {
                 worker.state = 'mining';
-                worker.targetResource = availablePatch.id;
-                this.mineralWorkers.push(workerId);
-                this.emit('workerAssigned', { worker, resource: availablePatch });
+                worker.targetResource = targetPatch.id;
+                if (!this.mineralWorkers.includes(workerId)) {
+                    this.mineralWorkers.push(workerId);
+                }
+                this.emit('workerAssigned', { worker, resource: targetPatch });
                 return true;
             }
         }
         return false;
     }
 
-    assignWorkerToGas(workerId) {
+    assignWorkerToGas(workerId, targetResourceId = null) {
         const worker = this.units.find(u => u.id === workerId);
         if (worker && worker.type === 'worker') {
-            // Find geyser with extractor
-            const availableGeyser = this.gasGeysers.find(g => g.hasExtractor && g.amount > 0);
-            if (availableGeyser) {
+            // Find the specific geyser or any available one with extractor
+            let targetGeyser;
+            if (targetResourceId) {
+                targetGeyser = this.gasGeysers.find(g => g.id === targetResourceId && g.hasExtractor && g.amount > 0);
+            }
+            if (!targetGeyser) {
+                targetGeyser = this.gasGeysers.find(g => g.hasExtractor && g.amount > 0);
+            }
+
+            if (targetGeyser) {
                 worker.state = 'harvesting_gas';
-                worker.targetResource = availableGeyser.id;
-                this.gasWorkers.push(workerId);
-                this.emit('workerAssigned', { worker, resource: availableGeyser });
+                worker.targetResource = targetGeyser.id;
+                if (!this.gasWorkers.includes(workerId)) {
+                    this.gasWorkers.push(workerId);
+                }
+                this.emit('workerAssigned', { worker, resource: targetGeyser });
                 return true;
             }
         }
@@ -346,10 +364,12 @@ class GameState {
 
     completeProduction(item) {
         if (item.category === 'unit') {
-            // Find a spawn point near base
+            // Find a spawn point outside the base
             const base = this.buildings.find(b => b.type === 'base');
-            const spawnX = base ? base.x + (Math.random() - 0.5) * 8 : 0;
-            const spawnZ = base ? base.z + (Math.random() - 0.5) * 8 : 0;
+            const angle = Math.random() * Math.PI * 2;
+            const spawnDistance = 8 + Math.random() * 3; // Spawn 8-11 units away from base center
+            const spawnX = base ? base.x + Math.cos(angle) * spawnDistance : 0;
+            const spawnZ = base ? base.z + Math.sin(angle) * spawnDistance : 0;
 
             this.addUnit({
                 type: item.unitType,

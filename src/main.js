@@ -91,8 +91,12 @@ class Game {
             return;
         }
 
-        // B - Toggle building menu
+        // B - Toggle building menu (skip if typing in input)
         if (e.key === 'b' || e.key === 'B') {
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+                return; // Don't trigger while typing
+            }
             this.toggleBuildingMenu();
             return;
         }
@@ -207,17 +211,25 @@ class Game {
             console.log('Action result:', result);
         });
 
-        // Load API keys from environment variables
+        // Check if using backend proxy (API key is on server)
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
         const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-        if (apiKey) {
-            this.aiAgent.setApiKey(apiKey);
-        }
 
-        // Load voice settings from environment variables
-        const elevenLabsKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
-        if (elevenLabsKey) {
-            this.aiAgent.setVoiceApiKey(elevenLabsKey);
+        if (apiBaseUrl) {
+            // Using backend proxy - no API key needed on frontend
+            this.aiAgent.setApiKey('proxy'); // Just a flag to enable API calls
+            // Voice synthesis also works via proxy
+            this.aiAgent.setVoiceApiKey('proxy');
             this.aiAgent.setVoiceEnabled(true);
+        } else if (apiKey) {
+            // Direct OpenAI calls - need API key
+            this.aiAgent.setApiKey(apiKey);
+            // Load voice settings from environment variables
+            const elevenLabsKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+            if (elevenLabsKey) {
+                this.aiAgent.setVoiceApiKey(elevenLabsKey);
+                this.aiAgent.setVoiceEnabled(true);
+            }
         }
 
         // Initialize chat interface
@@ -233,7 +245,8 @@ class Game {
             this.scene.camera,
             this.unitRenderer,
             this.terrainRenderer,
-            (selectedUnits) => this.hud.showSelection(selectedUnits[0])
+            (selection, type) => this.onSelectionChange(selection, type),
+            this.buildingRenderer
         );
 
         // Connect player actions to AI feedback
@@ -297,17 +310,25 @@ class Game {
                 console.log('Action result:', result);
             });
 
-            // Load API keys from environment variables
+            // Check if using backend proxy (API key is on server)
+            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
             const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-            if (apiKey) {
-                this.aiAgent.setApiKey(apiKey);
-            }
 
-            // Load voice settings from environment variables
-            const elevenLabsKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
-            if (elevenLabsKey) {
-                this.aiAgent.setVoiceApiKey(elevenLabsKey);
+            if (apiBaseUrl) {
+                // Using backend proxy - no API key needed on frontend
+                this.aiAgent.setApiKey('proxy');
+                // Voice synthesis also works via proxy
+                this.aiAgent.setVoiceApiKey('proxy');
                 this.aiAgent.setVoiceEnabled(true);
+            } else if (apiKey) {
+                // Direct OpenAI calls - need API key
+                this.aiAgent.setApiKey(apiKey);
+                // Load voice settings from environment variables
+                const elevenLabsKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+                if (elevenLabsKey) {
+                    this.aiAgent.setVoiceApiKey(elevenLabsKey);
+                    this.aiAgent.setVoiceEnabled(true);
+                }
             }
 
             // Initialize chat interface
@@ -323,7 +344,8 @@ class Game {
                 this.scene.camera,
                 this.unitRenderer,
                 this.terrainRenderer,
-                (selectedUnits) => this.hud.showSelection(selectedUnits[0])
+                (selection, type) => this.onSelectionChange(selection, type),
+                this.buildingRenderer
             );
 
             // Connect player actions to AI feedback
@@ -388,6 +410,31 @@ class Game {
     recreateGameObjects() {
         // Same as createInitialGameObjects for loaded games
         this.createInitialGameObjects();
+    }
+
+    onSelectionChange(selection, type) {
+        if (!selection || selection.length === 0) {
+            this.hud?.showSelection(null);
+            return;
+        }
+
+        const entity = selection[0];
+
+        if (type === 'building') {
+            // Show building info and production options
+            this.hud?.showBuildingSelection(entity, (unitType) => {
+                const result = this.gameActions.trainUnit(entity.type, unitType);
+                if (result.success) {
+                    this.hud?.showNotification(result.message);
+                    this.aiAgent?.notifyPlayerAction('train', { unitType, buildingType: entity.type });
+                } else {
+                    this.hud?.showNotification(result.message, 'error');
+                }
+            });
+        } else {
+            // Show unit info
+            this.hud?.showSelection(entity);
+        }
     }
 
     onBuildingCreated(building) {
@@ -457,7 +504,7 @@ class Game {
         this.updateBuildingConstruction();
 
         // Update unit positions for workers
-        this.updateWorkerPositions(deltaTime);
+        this.updateUnitPositions(deltaTime);
 
         // Update Three.js controls
         this.scene?.update();
@@ -478,39 +525,40 @@ class Game {
         });
     }
 
-    updateWorkerPositions(deltaTime) {
+    updateUnitPositions(deltaTime) {
         const speed = 5;
-        const workerRadius = 1.0; // Collision radius
+        const unitRadius = 1.0; // Collision radius
         const separationForce = 2.0;
 
         gameState.units.forEach((unit, index) => {
-            if (unit.type !== 'worker') return;
-
             let targetX = null;
             let targetZ = null;
 
-            // Determine target based on state
-            if (unit.state === 'mining') {
-                const patch = gameState.mineralPatches.find(p => p.id === unit.targetResource);
-                if (patch) {
-                    // Calculate offset position around the resource
-                    const workerIndex = this.getWorkerIndexAtResource(unit.id, unit.targetResource, 'mineral');
-                    const angle = (workerIndex * Math.PI * 2 / 4) + (Math.PI / 4); // Spread in 4 positions
-                    const offsetRadius = 1.5;
-                    targetX = patch.x + Math.cos(angle) * offsetRadius;
-                    targetZ = patch.z + Math.sin(angle) * offsetRadius;
+            // Workers have special behavior for resource gathering
+            if (unit.type === 'worker') {
+                if (unit.state === 'mining') {
+                    const patch = gameState.mineralPatches.find(p => p.id === unit.targetResource);
+                    if (patch) {
+                        const workerIndex = this.getWorkerIndexAtResource(unit.id, unit.targetResource, 'mineral');
+                        const angle = (workerIndex * Math.PI * 2 / 4) + (Math.PI / 4);
+                        const offsetRadius = 1.5;
+                        targetX = patch.x + Math.cos(angle) * offsetRadius;
+                        targetZ = patch.z + Math.sin(angle) * offsetRadius;
+                    }
+                } else if (unit.state === 'harvesting_gas') {
+                    const geyser = gameState.gasGeysers.find(g => g.id === unit.targetResource);
+                    if (geyser) {
+                        const workerIndex = this.getWorkerIndexAtResource(unit.id, unit.targetResource, 'gas');
+                        const angle = (workerIndex * Math.PI * 2 / 3);
+                        const offsetRadius = 2.0;
+                        targetX = geyser.x + Math.cos(angle) * offsetRadius;
+                        targetZ = geyser.z + Math.sin(angle) * offsetRadius;
+                    }
                 }
-            } else if (unit.state === 'harvesting_gas') {
-                const geyser = gameState.gasGeysers.find(g => g.id === unit.targetResource);
-                if (geyser) {
-                    // Calculate offset position around the geyser
-                    const workerIndex = this.getWorkerIndexAtResource(unit.id, unit.targetResource, 'gas');
-                    const angle = (workerIndex * Math.PI * 2 / 3); // Spread in 3 positions
-                    const offsetRadius = 2.0;
-                    targetX = geyser.x + Math.cos(angle) * offsetRadius;
-                    targetZ = geyser.z + Math.sin(angle) * offsetRadius;
-                }
-            } else if (unit.state === 'moving' && unit.targetX !== undefined) {
+            }
+
+            // All units can move when in 'moving' state
+            if (unit.state === 'moving' && unit.targetX !== undefined) {
                 targetX = unit.targetX;
                 targetZ = unit.targetZ;
             }
@@ -520,13 +568,13 @@ class Game {
                 let dx = targetX - unit.x;
                 let dz = targetZ - unit.z;
 
-                // Add separation from other workers
+                // Add separation from other units
                 gameState.units.forEach(other => {
-                    if (other.id === unit.id || other.type !== 'worker') return;
+                    if (other.id === unit.id) return;
                     const sepX = unit.x - other.x;
                     const sepZ = unit.z - other.z;
                     const sepDist = Math.sqrt(sepX * sepX + sepZ * sepZ);
-                    if (sepDist < workerRadius * 2 && sepDist > 0.01) {
+                    if (sepDist < unitRadius * 2 && sepDist > 0.01) {
                         dx += (sepX / sepDist) * separationForce * deltaTime;
                         dz += (sepZ / sepDist) * separationForce * deltaTime;
                     }
