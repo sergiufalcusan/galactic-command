@@ -630,7 +630,7 @@ export class InputHandler {
         });
 
         this.ghostBuilding = new THREE.Mesh(geometry, material);
-        this.ghostBuilding.position.y = config.height / 2;
+        this.ghostBuilding.position.y = 0.5 + config.height / 2; // Account for platform height
         this.scene.scene.add(this.ghostBuilding);
     }
 

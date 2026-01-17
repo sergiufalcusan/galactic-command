@@ -129,8 +129,18 @@ class Game {
     selectBuildingToPlace(buildingType) {
         this.buildingPlacementUI?.hide();
 
+        // Capture the currently selected worker (if any) when entering build mode
+        let selectedWorkerId = null;
+        if (this.inputHandler?.selectedUnits.length > 0) {
+            const firstSelectedId = this.inputHandler.selectedUnits[0];
+            const selectedUnit = gameState.units.find(u => u.id === firstSelectedId);
+            if (selectedUnit && selectedUnit.type === 'worker') {
+                selectedWorkerId = firstSelectedId;
+            }
+        }
+
         this.inputHandler?.enterBuildingPlacementMode(buildingType, (type, position) => {
-            const result = this.gameActions.buildStructure(type, position);
+            const result = this.gameActions.buildStructure(type, position, selectedWorkerId);
             if (result.success) {
                 this.hud?.showNotification(result.message);
                 // Notify AI of player's action for feedback
@@ -586,8 +596,9 @@ class Game {
 
     updateUnitPositions(deltaTime) {
         const speed = 5;
-        const unitRadius = 1.0; // Collision radius
-        const separationForce = 2.0;
+        const unitRadius = 1.5; // Collision radius (increased from 1.0)
+        const separationForce = 4.0; // Stronger separation force
+        const minSeparation = unitRadius * 1.5; // Minimum distance between units
 
         gameState.units.forEach((unit, index) => {
             let targetX = null;
@@ -600,18 +611,39 @@ class Game {
                     if (patch) {
                         const workerIndex = this.getWorkerIndexAtResource(unit.id, unit.targetResource, 'mineral');
                         const angle = (workerIndex * Math.PI * 2 / 4) + (Math.PI / 4);
-                        const offsetRadius = 1.5;
+                        const offsetRadius = 2.0;
                         targetX = patch.x + Math.cos(angle) * offsetRadius;
                         targetZ = patch.z + Math.sin(angle) * offsetRadius;
+                    }
+                } else if (unit.state === 'returning_minerals') {
+                    // Return to base to deposit minerals
+                    const base = gameState.buildings.find(b => b.type === 'base');
+                    if (base) {
+                        // Aim for a point near the base
+                        const dx = unit.x - base.x;
+                        const dz = unit.z - base.z;
+                        const angle = Math.atan2(dz, dx);
+                        targetX = base.x + Math.cos(angle) * 4;
+                        targetZ = base.z + Math.sin(angle) * 4;
                     }
                 } else if (unit.state === 'harvesting_gas') {
                     const geyser = gameState.gasGeysers.find(g => g.id === unit.targetResource);
                     if (geyser) {
                         const workerIndex = this.getWorkerIndexAtResource(unit.id, unit.targetResource, 'gas');
                         const angle = (workerIndex * Math.PI * 2 / 3);
-                        const offsetRadius = 2.0;
+                        const offsetRadius = 2.0; // Keep within gatherRange of 2.5
                         targetX = geyser.x + Math.cos(angle) * offsetRadius;
                         targetZ = geyser.z + Math.sin(angle) * offsetRadius;
+                    }
+                } else if (unit.state === 'returning_gas') {
+                    // Return to base to deposit gas
+                    const base = gameState.buildings.find(b => b.type === 'base');
+                    if (base) {
+                        const dx = unit.x - base.x;
+                        const dz = unit.z - base.z;
+                        const angle = Math.atan2(dz, dx);
+                        targetX = base.x + Math.cos(angle) * 4;
+                        targetZ = base.z + Math.sin(angle) * 4;
                     }
                 } else if (unit.state === 'constructing') {
                     if (unit.constructionData) {
@@ -630,22 +662,34 @@ class Game {
                 targetZ = unit.targetZ;
             }
 
+            // Calculate separation from nearby units (applies to ALL units, even idle ones)
+            let separationX = 0;
+            let separationZ = 0;
+            let needsSeparation = false;
+
+            gameState.units.forEach(other => {
+                if (other.id === unit.id) return;
+                const sepX = unit.x - other.x;
+                const sepZ = unit.z - other.z;
+                const sepDist = Math.sqrt(sepX * sepX + sepZ * sepZ);
+
+                // Apply separation if units are too close
+                if (sepDist < minSeparation && sepDist > 0.01) {
+                    const strength = (minSeparation - sepDist) / minSeparation; // Stronger when closer
+                    separationX += (sepX / sepDist) * separationForce * strength;
+                    separationZ += (sepZ / sepDist) * separationForce * strength;
+                    needsSeparation = true;
+                }
+            });
+
             // Move towards target if one exists
             if (targetX !== null && targetZ !== null) {
                 let dx = targetX - unit.x;
                 let dz = targetZ - unit.z;
 
-                // Add separation from other units
-                gameState.units.forEach(other => {
-                    if (other.id === unit.id) return;
-                    const sepX = unit.x - other.x;
-                    const sepZ = unit.z - other.z;
-                    const sepDist = Math.sqrt(sepX * sepX + sepZ * sepZ);
-                    if (sepDist < unitRadius * 2 && sepDist > 0.01) {
-                        dx += (sepX / sepDist) * separationForce * deltaTime;
-                        dz += (sepZ / sepDist) * separationForce * deltaTime;
-                    }
-                });
+                // Add separation to movement direction
+                dx += separationX * deltaTime;
+                dz += separationZ * deltaTime;
 
                 const distance = Math.sqrt(dx * dx + dz * dz);
 
@@ -670,6 +714,15 @@ class Game {
                         // For Human, we stay in constructing state and standing still
                         // No further action needed here as checkHumanConstruction handles unpausing
                     }
+                }
+            } else if (needsSeparation) {
+                // Apply separation even when idle to push overlapping units apart
+                const sepMag = Math.sqrt(separationX * separationX + separationZ * separationZ);
+                if (sepMag > 0.01) {
+                    const moveSpeed = Math.min(speed * 0.5 * deltaTime, sepMag * deltaTime);
+                    unit.x += (separationX / sepMag) * moveSpeed;
+                    unit.z += (separationZ / sepMag) * moveSpeed;
+                    this.unitRenderer?.updateUnitPosition(unit.id, unit.x, unit.z);
                 }
             }
         });

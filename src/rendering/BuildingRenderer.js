@@ -49,7 +49,7 @@ export class BuildingRenderer {
     createBuilding(buildingData) {
 
         const group = new THREE.Group();
-        group.position.set(buildingData.x, 0, buildingData.z);
+        group.position.set(buildingData.x, 0.5, buildingData.z);
         group.userData.buildingData = buildingData;
 
         // Add invisible hitbox for click detection (covers entire building)

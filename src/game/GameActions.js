@@ -30,7 +30,7 @@ export class GameActions {
         }
     }
 
-    buildStructure(buildingType, manualPosition = null) {
+    buildStructure(buildingType, manualPosition = null, selectedWorkerId = null) {
         const result = { success: false, message: '' };
         const faction = gameState.faction;
 
@@ -147,12 +147,26 @@ export class GameActions {
 
         // Special Human logic: SCV must go to site and stay there
         if (faction.id === 'human') {
-            // Find an SCV
-            let scv = gameState.getIdleWorkers()[0];
-            if (!scv && gameState.mineralWorkers.length > 0) {
-                // Take one from minerals
-                const workerId = gameState.mineralWorkers.pop();
-                scv = gameState.units.find(u => u.id === workerId);
+            // Use selected worker if provided, otherwise find one
+            let scv = null;
+            if (selectedWorkerId) {
+                const selectedUnit = gameState.units.find(u => u.id === selectedWorkerId);
+                if (selectedUnit && selectedUnit.type === 'worker') {
+                    scv = selectedUnit;
+                    // Remove from worker lists if present
+                    gameState.mineralWorkers = gameState.mineralWorkers.filter(id => id !== selectedWorkerId);
+                    gameState.gasWorkers = gameState.gasWorkers.filter(id => id !== selectedWorkerId);
+                }
+            }
+
+            // Fall back to auto-selection if no valid selected worker
+            if (!scv) {
+                scv = gameState.getIdleWorkers()[0];
+                if (!scv && gameState.mineralWorkers.length > 0) {
+                    // Take one from minerals
+                    const workerId = gameState.mineralWorkers.pop();
+                    scv = gameState.units.find(u => u.id === workerId);
+                }
             }
 
             if (!scv) {
@@ -208,12 +222,26 @@ export class GameActions {
 
         // Special Zerg logic: drones are consumed
         if (faction.id === 'zerg') {
-            // Find a drone
-            let drone = gameState.getIdleWorkers()[0];
-            if (!drone && gameState.mineralWorkers.length > 0) {
-                // Take one from minerals
-                const workerId = gameState.mineralWorkers.pop();
-                drone = gameState.units.find(u => u.id === workerId);
+            // Use selected worker if provided, otherwise find one
+            let drone = null;
+            if (selectedWorkerId) {
+                const selectedUnit = gameState.units.find(u => u.id === selectedWorkerId);
+                if (selectedUnit && selectedUnit.type === 'worker') {
+                    drone = selectedUnit;
+                    // Remove from worker lists if present
+                    gameState.mineralWorkers = gameState.mineralWorkers.filter(id => id !== selectedWorkerId);
+                    gameState.gasWorkers = gameState.gasWorkers.filter(id => id !== selectedWorkerId);
+                }
+            }
+
+            // Fall back to auto-selection if no valid selected worker
+            if (!drone) {
+                drone = gameState.getIdleWorkers()[0];
+                if (!drone && gameState.mineralWorkers.length > 0) {
+                    // Take one from minerals
+                    const workerId = gameState.mineralWorkers.pop();
+                    drone = gameState.units.find(u => u.id === workerId);
+                }
             }
 
             if (!drone) {

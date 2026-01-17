@@ -80,6 +80,13 @@ export class UnitRenderer {
             group.add(this.createFallbackWorker());
         }
 
+        // Add cargo visual (hidden by default)
+        const cargoGroup = this.createCargoVisual();
+        cargoGroup.visible = false;
+        cargoGroup.position.set(0, 1.5, 0.5); // Position above and slightly in front of worker
+        group.add(cargoGroup);
+        group.userData.cargoVisual = cargoGroup;
+
         // Add invisible selection hitbox (larger than model to make selection easier)
         const hitboxGeometry = new THREE.CylinderGeometry(1.2, 1.2, 2.5, 8);
         const hitboxMaterial = new THREE.MeshBasicMaterial({
@@ -99,11 +106,49 @@ export class UnitRenderer {
         group.userData.selectionRing = selectionRing;
 
         // Set position
-        group.position.set(unitData.x, 0, unitData.z);
+        group.position.set(unitData.x, 0.5, unitData.z);
         group.userData.unitData = unitData;
 
         this.scene.addObject(unitData.id, group);
         this.units.set(unitData.id, group);
+
+        return group;
+    }
+
+    createCargoVisual() {
+        const group = new THREE.Group();
+
+        // Mineral crystal cargo (blue glowing crystal)
+        const crystalGeometry = new THREE.OctahedronGeometry(0.35, 0);
+        const crystalMaterial = new THREE.MeshStandardMaterial({
+            color: 0x00ccff,
+            emissive: 0x0066ff,
+            emissiveIntensity: 0.8,
+            roughness: 0.2,
+            metalness: 0.6,
+            transparent: true,
+            opacity: 0.9
+        });
+        const mineralCrystal = new THREE.Mesh(crystalGeometry, crystalMaterial);
+        mineralCrystal.name = 'mineralCargo';
+        mineralCrystal.rotation.x = Math.PI / 4;
+        group.add(mineralCrystal);
+
+        // Gas container cargo (green glowing sphere)
+        const gasGeometry = new THREE.SphereGeometry(0.3, 8, 6);
+        const gasMaterial = new THREE.MeshStandardMaterial({
+            color: 0x00ff66,
+            emissive: 0x00aa44,
+            emissiveIntensity: 0.8,
+            roughness: 0.3,
+            metalness: 0.4,
+            transparent: true,
+            opacity: 0.9
+        });
+        const gasContainer = new THREE.Mesh(gasGeometry, gasMaterial);
+        gasContainer.name = 'gasCargo';
+        gasContainer.visible = false; // Hidden by default, shown for gas
+        group.add(gasContainer);
 
         return group;
     }
@@ -168,7 +213,7 @@ export class UnitRenderer {
         group.add(selectionRing);
         group.userData.selectionRing = selectionRing;
 
-        group.position.set(unitData.x, 0, unitData.z);
+        group.position.set(unitData.x, 0.5, unitData.z);
         group.userData.unitData = unitData;
 
         this.scene.addObject(unitData.id, group);
@@ -234,6 +279,7 @@ export class UnitRenderer {
     animateUnits(time) {
         this.units.forEach((group, id) => {
             const data = group.userData.unitData;
+            if (!data) return;
 
             // Idle bobbing animation for Protoss
             if (this.faction.id === 'protoss') {
@@ -241,8 +287,31 @@ export class UnitRenderer {
             }
 
             // Mining animation - gentle rotation
-            if (data && (data.state === 'mining' || data.state === 'harvesting_gas')) {
+            if (data.state === 'mining' || data.state === 'harvesting_gas') {
                 group.rotation.y = Math.sin(time * 5) * 0.2;
+            }
+
+            // Handle cargo visual for workers
+            const cargoVisual = group.userData.cargoVisual;
+            if (cargoVisual && data.type === 'worker') {
+                const isCarryingMinerals = data.state === 'returning_minerals';
+                const isCarryingGas = data.state === 'returning_gas';
+
+                if (isCarryingMinerals || isCarryingGas) {
+                    cargoVisual.visible = true;
+
+                    // Show the appropriate cargo type
+                    const mineralCargo = cargoVisual.getObjectByName('mineralCargo');
+                    const gasCargo = cargoVisual.getObjectByName('gasCargo');
+                    if (mineralCargo) mineralCargo.visible = isCarryingMinerals;
+                    if (gasCargo) gasCargo.visible = isCarryingGas;
+
+                    // Animate cargo bobbing
+                    cargoVisual.position.y = 1.5 + Math.sin(time * 4) * 0.1;
+                    cargoVisual.rotation.y = time * 2; // Slow rotation
+                } else {
+                    cargoVisual.visible = false;
+                }
             }
         });
     }

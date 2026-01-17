@@ -89,7 +89,7 @@ export class TerrainRenderer {
 
     createMineralPatch(data) {
         const group = new THREE.Group();
-        group.position.set(data.x, 0, data.z);
+        group.position.set(data.x, 0.5, data.z);
 
         // Load mineral model
         this.loadResourceModel(group, '/models/mineral.glb', 1.5, 0x00d4ff);
@@ -113,7 +113,7 @@ export class TerrainRenderer {
 
     createGasGeyser(data) {
         const group = new THREE.Group();
-        group.position.set(data.x, 0, data.z);
+        group.position.set(data.x, 0.5, data.z);
 
         // Load geyser model
         this.loadResourceModel(group, '/models/geyser.glb', 2.0, 0x3a3a3a);

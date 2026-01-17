@@ -128,15 +128,37 @@ class GameState {
         // Add supply from base
         this.populationMax = base.supplyProvided;
 
-        // Starting workers
+        // Starting workers - spawn outside the base with proper spacing
         const workerCount = 6;
+        const minDistance = 2.0; // Minimum distance between workers
+        const spawnRadius = 8; // Distance from base center (outside the base)
+
         for (let i = 0; i < workerCount; i++) {
-            const angle = (i / workerCount) * Math.PI * 2;
+            // Distribute workers evenly around the base
+            const baseAngle = (i / workerCount) * Math.PI * 2;
+
+            // Find a non-overlapping position
+            let spawnX, spawnZ;
+            let attempts = 0;
+            const maxAttempts = 10;
+
+            do {
+                // Add small random offset to the angle for variety
+                const angleOffset = (Math.random() - 0.5) * 0.3;
+                const angle = baseAngle + angleOffset;
+                const radiusOffset = Math.random() * 2; // 8-10 units from center
+                const radius = spawnRadius + radiusOffset;
+
+                spawnX = Math.cos(angle) * radius;
+                spawnZ = Math.sin(angle) * radius;
+                attempts++;
+            } while (attempts < maxAttempts && this.isPositionOccupied(spawnX, spawnZ, minDistance));
+
             const worker = this.addUnit({
                 type: 'worker',
                 name: this.faction.worker.name,
-                x: Math.cos(angle) * 3,
-                z: Math.sin(angle) * 3,
+                x: spawnX,
+                z: spawnZ,
                 health: 40,
                 maxHealth: 40,
                 state: 'idle'
@@ -149,6 +171,41 @@ class GameState {
         }
 
         this.population = workerCount;
+    }
+
+    // Check if a position is too close to any existing unit
+    isPositionOccupied(x, z, minDistance) {
+        return this.units.some(unit => {
+            const dx = unit.x - x;
+            const dz = unit.z - z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+            return distance < minDistance;
+        });
+    }
+
+    // Find a spawn position that doesn't overlap with existing units
+    findNonOverlappingSpawnPosition(baseX, baseZ, spawnRadius, minDistance = 2.0) {
+        const maxAttempts = 20;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radiusOffset = Math.random() * 3; // Add some variation
+            const radius = spawnRadius + radiusOffset;
+
+            const spawnX = baseX + Math.cos(angle) * radius;
+            const spawnZ = baseZ + Math.sin(angle) * radius;
+
+            if (!this.isPositionOccupied(spawnX, spawnZ, minDistance)) {
+                return { x: spawnX, z: spawnZ };
+            }
+        }
+
+        // Fallback: return a position even if it overlaps (rare case)
+        const angle = Math.random() * Math.PI * 2;
+        return {
+            x: baseX + Math.cos(angle) * spawnRadius,
+            z: baseZ + Math.sin(angle) * spawnRadius
+        };
     }
 
     // Building management
@@ -217,13 +274,38 @@ class GameState {
     assignWorkerToMinerals(workerId, targetResourceId = null) {
         const worker = this.units.find(u => u.id === workerId);
         if (worker && worker.type === 'worker') {
-            // Find the specific patch or nearest available one
+            // Find the specific patch or pick a random one with fewest workers
             let targetPatch;
             if (targetResourceId) {
                 targetPatch = this.mineralPatches.find(p => p.id === targetResourceId && p.amount > 0);
             }
             if (!targetPatch) {
-                targetPatch = this.mineralPatches.find(p => p.amount > 0);
+                // Get all available patches
+                const availablePatches = this.mineralPatches.filter(p => p.amount > 0);
+
+                if (availablePatches.length > 0) {
+                    // Count workers per patch
+                    const workerCountByPatch = new Map();
+                    availablePatches.forEach(p => workerCountByPatch.set(p.id, 0));
+
+                    this.mineralWorkers.forEach(wId => {
+                        const w = this.units.find(u => u.id === wId);
+                        if (w && workerCountByPatch.has(w.targetResource)) {
+                            workerCountByPatch.set(w.targetResource, workerCountByPatch.get(w.targetResource) + 1);
+                        }
+                    });
+
+                    // Find the minimum worker count
+                    const minWorkers = Math.min(...workerCountByPatch.values());
+
+                    // Get all patches with the minimum worker count
+                    const leastCrowdedPatches = availablePatches.filter(
+                        p => workerCountByPatch.get(p.id) === minWorkers
+                    );
+
+                    // Randomly pick from the least crowded patches
+                    targetPatch = leastCrowdedPatches[Math.floor(Math.random() * leastCrowdedPatches.length)];
+                }
             }
 
             if (targetPatch) {
@@ -266,14 +348,23 @@ class GameState {
 
     // Resource gathering (called on game tick)
     gatherResources(deltaTime) {
-        const miningRate = 5; // minerals per second per worker
-        const gasRate = 4; // gas per second per worker
-        const gatherRange = 2; // Must be within this distance to gather
+        const miningRate = 25; // minerals per second when mining (takes 2 sec to fill 50)
+        const gasRate = 20; // gas per second when gathering
+        const gatherRange = 2.5; // Must be within this distance to gather
+        const cargoCapacity = 50; // Amount worker can carry
+        const depositRange = 5; // Distance to base to deposit
 
         // Mineral gathering
         this.mineralWorkers.forEach(workerId => {
             const worker = this.units.find(u => u.id === workerId);
-            if (worker && worker.state === 'mining') {
+            if (!worker) return;
+
+            // Initialize cargo if not set
+            if (worker.carriedMinerals === undefined) {
+                worker.carriedMinerals = 0;
+            }
+
+            if (worker.state === 'mining') {
                 const patch = this.mineralPatches.find(p => p.id === worker.targetResource);
                 if (patch && patch.amount > 0) {
                     // Check if worker is close enough to gather
@@ -282,14 +373,42 @@ class GameState {
                     const distance = Math.sqrt(dx * dx + dz * dz);
 
                     if (distance <= gatherRange) {
-                        const gathered = Math.min(miningRate * deltaTime, patch.amount);
-                        patch.amount -= gathered;
-                        this.minerals += gathered;
+                        // Gather minerals into cargo
+                        const canGather = cargoCapacity - worker.carriedMinerals;
+                        const toGather = Math.min(miningRate * deltaTime, patch.amount, canGather);
+                        patch.amount -= toGather;
+                        worker.carriedMinerals += toGather;
+
+                        // Check if cargo is full
+                        if (worker.carriedMinerals >= cargoCapacity) {
+                            worker.state = 'returning_minerals';
+                            this.emit('workerCargoFull', { worker, resourceType: 'minerals' });
+                        }
                     }
                 } else {
-                    // Find another patch
-                    worker.state = 'idle';
-                    this.mineralWorkers = this.mineralWorkers.filter(id => id !== workerId);
+                    // Patch depleted, find another or go idle
+                    if (worker.carriedMinerals > 0) {
+                        worker.state = 'returning_minerals';
+                    } else {
+                        worker.state = 'idle';
+                        this.mineralWorkers = this.mineralWorkers.filter(id => id !== workerId);
+                    }
+                }
+            } else if (worker.state === 'returning_minerals') {
+                // Check if close to base to deposit
+                const base = this.buildings.find(b => b.type === 'base');
+                if (base) {
+                    const dx = base.x - worker.x;
+                    const dz = base.z - worker.z;
+                    const distance = Math.sqrt(dx * dx + dz * dz);
+
+                    if (distance <= depositRange) {
+                        // Deposit minerals
+                        this.minerals += worker.carriedMinerals;
+                        worker.carriedMinerals = 0;
+                        worker.state = 'mining'; // Go back to mining
+                        this.emit('workerDeposited', { worker, resourceType: 'minerals' });
+                    }
                 }
             }
         });
@@ -297,18 +416,85 @@ class GameState {
         // Gas gathering
         this.gasWorkers.forEach(workerId => {
             const worker = this.units.find(u => u.id === workerId);
-            if (worker && worker.state === 'harvesting_gas') {
+            if (!worker) return;
+
+            // Initialize cargo if not set
+            if (worker.carriedGas === undefined) {
+                worker.carriedGas = 0;
+            }
+
+            // Ensure worker has a valid target geyser
+            if (!worker.targetResource) {
+                const availableGeyser = this.gasGeysers.find(g => g.hasExtractor && g.amount > 0);
+                if (availableGeyser) {
+                    worker.targetResource = availableGeyser.id;
+                    worker.state = 'harvesting_gas';
+                } else {
+                    worker.state = 'idle';
+                    return;
+                }
+            }
+
+            // Ensure worker is in a gas-related state (recovery for stuck workers)
+            if (worker.state !== 'harvesting_gas' && worker.state !== 'returning_gas') {
+                // Worker is in gasWorkers list but not in gas state - fix it
+                if (worker.carriedGas > 0) {
+                    worker.state = 'returning_gas';
+                } else {
+                    worker.state = 'harvesting_gas';
+                }
+            }
+
+            if (worker.state === 'harvesting_gas') {
                 const geyser = this.gasGeysers.find(g => g.id === worker.targetResource);
                 if (geyser && geyser.amount > 0 && geyser.hasExtractor) {
-                    // Check if worker is close enough to gather
                     const dx = geyser.x - worker.x;
                     const dz = geyser.z - worker.z;
                     const distance = Math.sqrt(dx * dx + dz * dz);
 
                     if (distance <= gatherRange) {
-                        const gathered = Math.min(gasRate * deltaTime, geyser.amount);
-                        geyser.amount -= gathered;
-                        this.gas += gathered;
+                        // Gather gas into cargo
+                        const canGather = cargoCapacity - worker.carriedGas;
+                        const toGather = Math.min(gasRate * deltaTime, geyser.amount, canGather);
+                        geyser.amount -= toGather;
+                        worker.carriedGas += toGather;
+
+                        // Check if cargo is full
+                        if (worker.carriedGas >= cargoCapacity) {
+                            worker.state = 'returning_gas';
+                            this.emit('workerCargoFull', { worker, resourceType: 'gas' });
+                        }
+                    }
+                    // If not in range, the movement code in main.js will move the worker
+                } else if (!geyser || !geyser.hasExtractor) {
+                    // Geyser no longer valid, try to find another
+                    const availableGeyser = this.gasGeysers.find(g => g.hasExtractor && g.amount > 0);
+                    if (availableGeyser) {
+                        worker.targetResource = availableGeyser.id;
+                    } else {
+                        // No gas available, go idle
+                        worker.state = 'idle';
+                        this.gasWorkers = this.gasWorkers.filter(id => id !== workerId);
+                    }
+                } else if (geyser.amount <= 0) {
+                    // Geyser depleted
+                    worker.state = 'idle';
+                    this.gasWorkers = this.gasWorkers.filter(id => id !== workerId);
+                }
+            } else if (worker.state === 'returning_gas') {
+                // Check if close to base to deposit
+                const base = this.buildings.find(b => b.type === 'base');
+                if (base) {
+                    const dx = base.x - worker.x;
+                    const dz = base.z - worker.z;
+                    const distance = Math.sqrt(dx * dx + dz * dz);
+
+                    if (distance <= depositRange) {
+                        // Deposit gas
+                        this.gas += worker.carriedGas;
+                        worker.carriedGas = 0;
+                        worker.state = 'harvesting_gas'; // Go back to harvesting
+                        this.emit('workerDeposited', { worker, resourceType: 'gas' });
                     }
                 }
             }
@@ -372,18 +558,22 @@ class GameState {
 
     completeProduction(item) {
         if (item.category === 'unit') {
-            // Find a spawn point outside the base
+            // Find a spawn point outside the base that doesn't overlap with existing units
             const base = this.buildings.find(b => b.type === 'base');
-            const angle = Math.random() * Math.PI * 2;
-            const spawnDistance = 8 + Math.random() * 3; // Spawn 8-11 units away from base center
-            const spawnX = base ? base.x + Math.cos(angle) * spawnDistance : 0;
-            const spawnZ = base ? base.z + Math.sin(angle) * spawnDistance : 0;
+            const baseX = base ? base.x : 0;
+            const baseZ = base ? base.z : 0;
+            const spawnDistance = 8; // Base spawn distance
+            const minUnitDistance = 2.0; // Minimum distance between units
+
+            const spawnPos = this.findNonOverlappingSpawnPosition(
+                baseX, baseZ, spawnDistance, minUnitDistance
+            );
 
             this.addUnit({
                 type: item.unitType,
                 name: item.name,
-                x: spawnX,
-                z: spawnZ,
+                x: spawnPos.x,
+                z: spawnPos.z,
                 health: item.health || 100,
                 maxHealth: item.health || 100,
                 state: 'idle',
