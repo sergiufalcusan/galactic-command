@@ -239,19 +239,39 @@ Current game state:
     getUnitCounts() {
         const units = gameState.units;
         const counts = {};
+        const inProduction = {};
 
+        // Count completed units
         units.forEach(unit => {
             const type = unit.name || unit.type;
             counts[type] = (counts[type] || 0) + 1;
         });
 
-        if (Object.keys(counts).length === 0) {
+        // Count units in production queue
+        gameState.productionQueue.forEach(item => {
+            if (item.category === 'unit') {
+                const type = item.name || item.unitType;
+                inProduction[type] = (inProduction[type] || 0) + 1;
+            }
+        });
+
+        if (Object.keys(counts).length === 0 && Object.keys(inProduction).length === 0) {
             return 'No units yet';
         }
 
-        return Object.entries(counts)
-            .map(([type, count]) => `${count} ${type}${count > 1 ? 's' : ''}`)
-            .join(', ');
+        const parts = [];
+
+        // Add completed units
+        Object.entries(counts).forEach(([type, count]) => {
+            parts.push(`${count} ${type}${count > 1 ? 's' : ''}`);
+        });
+
+        // Add in-production units
+        Object.entries(inProduction).forEach(([type, count]) => {
+            parts.push(`${count} ${type}${count > 1 ? 's' : ''} (training)`);
+        });
+
+        return parts.join(', ');
     }
 
     async callOpenAI(gameContext, userMessage) {
@@ -474,11 +494,13 @@ Current game state:
         if (this.isProcessing) return null;
 
         const actionDescriptions = {
-            'build': `The player just successfully built a ${details.buildingName || details.type}`,
+            'build': `The player just placed a ${details.buildingName || details.type} for construction`,
+            'build_complete': `A ${details.buildingName || details.type} just finished construction`,
             'mine_minerals': `The player assigned ${details.count || 1} worker(s) to mine minerals`,
             'harvest_gas': `The player assigned ${details.count || 1} worker(s) to harvest vespene gas`,
             'move_units': `The player moved ${details.count || 1} unit(s) to a new location`,
-            'train': `The player started training a ${details.unitType || 'unit'} from the ${details.buildingType || 'base'}`
+            'train': `The player started training a ${details.unitType || 'unit'} from the ${details.buildingType || 'base'}`,
+            'train_complete': `A ${details.unitType || 'unit'} just finished training from the ${details.buildingType || 'base'}`
         };
 
         const actionDescription = actionDescriptions[actionType] || `The player performed: ${actionType}`;

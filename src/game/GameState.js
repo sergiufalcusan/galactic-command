@@ -535,15 +535,26 @@ class GameState {
     updateProductionQueue(deltaTime) {
         const completed = [];
 
+        // Group items by producer to ensure sequential production per building
+        const activeByProducer = new Map();
+
         this.productionQueue.forEach(item => {
             if (item.isPaused) return;
 
-            const speedMultiplier = item.speedMultiplier || 1.0;
-            item.progress += deltaTime * speedMultiplier;
+            // Determine the producer key (unique per building instance)
+            const producerKey = item.producerId || item.buildingId || item.producerType || 'default';
 
-            // Use small tolerance to avoid floating point issues
-            if (item.progress >= item.buildTime - 0.01) {
-                completed.push(item);
+            // Only the FIRST item for each producer should progress
+            if (!activeByProducer.has(producerKey)) {
+                activeByProducer.set(producerKey, item);
+
+                const speedMultiplier = item.speedMultiplier || 1.0;
+                item.progress += deltaTime * speedMultiplier;
+
+                // Use small tolerance to avoid floating point issues
+                if (item.progress >= item.buildTime - 0.01) {
+                    completed.push(item);
+                }
             }
         });
 
@@ -558,15 +569,22 @@ class GameState {
 
     completeProduction(item) {
         if (item.category === 'unit') {
-            // Find a spawn point outside the base that doesn't overlap with existing units
-            const base = this.buildings.find(b => b.type === 'base');
-            const baseX = base ? base.x : 0;
-            const baseZ = base ? base.z : 0;
-            const spawnDistance = 8; // Base spawn distance
+            // Use producer building position if available, otherwise fall back to base
+            let spawnBaseX = item.producerX;
+            let spawnBaseZ = item.producerZ;
+
+            // Fallback to base if producer position not set
+            if (spawnBaseX === undefined || spawnBaseZ === undefined) {
+                const base = this.buildings.find(b => b.type === 'base');
+                spawnBaseX = base ? base.x : 0;
+                spawnBaseZ = base ? base.z : 0;
+            }
+
+            const spawnDistance = 6; // Spawn distance from building
             const minUnitDistance = 2.0; // Minimum distance between units
 
             const spawnPos = this.findNonOverlappingSpawnPosition(
-                baseX, baseZ, spawnDistance, minUnitDistance
+                spawnBaseX, spawnBaseZ, spawnDistance, minUnitDistance
             );
 
             this.addUnit({

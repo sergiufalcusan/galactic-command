@@ -17,6 +17,11 @@ export class HUD {
         this.selectedInfo = document.getElementById('selected-info');
         this.actionButtons = document.getElementById('action-buttons');
 
+        // Production queue panel
+        this.productionQueuePanel = document.getElementById('production-queue-panel');
+        this.queueItems = document.getElementById('queue-items');
+        this.selectedBuildingId = null;
+
         this.init();
     }
 
@@ -96,6 +101,10 @@ export class HUD {
     }
 
     showSelection(entity) {
+        // Hide production queue when selecting non-building
+        this.selectedBuildingId = null;
+        this.hideProductionQueue();
+
         if (!entity) {
             this.selectedInfo.querySelector('.selected-name').textContent = 'Nothing selected';
             this.actionButtons.innerHTML = '';
@@ -125,9 +134,12 @@ export class HUD {
     showBuildingSelection(building, onTrainUnit) {
         if (!building) {
             this.showSelection(null);
+            this.selectedBuildingId = null;
+            this.hideProductionQueue();
             return;
         }
 
+        this.selectedBuildingId = building.id;
         this.selectedInfo.querySelector('.selected-name').textContent = building.name || building.type;
         this.actionButtons.innerHTML = '';
 
@@ -201,6 +213,9 @@ export class HUD {
             note.style.cssText = 'color: #ffcc00; font-size: 0.8rem; padding: 8px;';
             this.actionButtons.appendChild(note);
         }
+
+        // Show production queue for this building
+        this.updateProductionQueueDisplay();
     }
 
     addProductionButton(icon, tooltip, onClick) {
@@ -227,9 +242,155 @@ export class HUD {
             stalker: '🎯',
             immortal: '🛡️',
             // Generic
-            worker: '👷'
+            worker: '👷',
+            drone: '🐜',
+            scv: '🔧',
+            probe: '💠'
         };
         return icons[unitKey] || '⚙️';
+    }
+
+    // Production Queue Methods
+    showProductionQueue() {
+        if (this.productionQueuePanel) {
+            this.productionQueuePanel.classList.remove('hidden');
+        }
+    }
+
+    hideProductionQueue() {
+        if (this.productionQueuePanel) {
+            this.productionQueuePanel.classList.add('hidden');
+        }
+        this.selectedBuildingId = null;
+    }
+
+    updateProductionQueueDisplay() {
+        if (!this.selectedBuildingId || !this.queueItems) {
+            return;
+        }
+
+        // Get production items for the selected building
+        const queuedItems = gameState.productionQueue.filter(item => {
+            // Match by buildingId for buildings under construction
+            if (item.buildingId === this.selectedBuildingId) return true;
+            // Match unit production by producerId (specific building instance)
+            if (item.category === 'unit' && item.producerId === this.selectedBuildingId) return true;
+            return false;
+        });
+
+        // Create a key to identify when queue changes
+        const queueKey = queuedItems.map(item => `${item.unitType || item.type}_${item.startTime}`).join('|');
+
+        // Only rebuild DOM if queue composition changed
+        if (this.lastQueueKey !== queueKey) {
+            this.lastQueueKey = queueKey;
+            this.queueItems.innerHTML = '';
+
+            if (queuedItems.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.className = 'queue-empty';
+                emptyMsg.textContent = 'No units in queue';
+                this.queueItems.appendChild(emptyMsg);
+                this.showProductionQueue();
+                return;
+            }
+
+            queuedItems.forEach((item, index) => {
+                const queueItem = document.createElement('div');
+                queueItem.className = 'queue-item';
+                queueItem.dataset.index = index;
+
+                const icon = item.category === 'unit' ? this.getUnitIcon(item.unitType) : '🏗️';
+                const displayName = item.name || item.unitType || 'Unknown';
+
+                // First item is in production (no cancel), others can be cancelled
+                const isInProgress = index === 0;
+                const cancelButton = isInProgress
+                    ? '<div class="queue-item-status">🔄</div>'
+                    : `<button class="queue-item-cancel" data-queue-index="${index}" title="Cancel">✕</button>`;
+
+                queueItem.innerHTML = `
+                    <div class="queue-item-icon">${icon}</div>
+                    <div class="queue-item-details">
+                        <div class="queue-item-name">${displayName}</div>
+                        <div class="queue-item-progress">
+                            <div class="queue-item-progress-bar"></div>
+                        </div>
+                        <div class="queue-item-time"></div>
+                    </div>
+                    ${cancelButton}
+                `;
+
+                // Add cancel click handler for non-in-progress items
+                if (!isInProgress) {
+                    const cancelBtn = queueItem.querySelector('.queue-item-cancel');
+                    cancelBtn?.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.cancelQueueItem(item);
+                    });
+                }
+
+                this.queueItems.appendChild(queueItem);
+            });
+        }
+
+        // Update progress bars and time (this can happen every frame without flicker)
+        const queueItemElements = this.queueItems.querySelectorAll('.queue-item');
+        queuedItems.forEach((item, index) => {
+            const queueItemEl = queueItemElements[index];
+            if (queueItemEl) {
+                const progress = Math.min(1, (item.progress || 0) / (item.buildTime || 1));
+                const timeRemaining = Math.max(0, (item.buildTime || 0) - (item.progress || 0));
+
+                const progressBar = queueItemEl.querySelector('.queue-item-progress-bar');
+                const timeEl = queueItemEl.querySelector('.queue-item-time');
+
+                if (progressBar) {
+                    progressBar.style.width = `${progress * 100}%`;
+                }
+                if (timeEl) {
+                    timeEl.textContent = `${Math.ceil(timeRemaining)}s remaining`;
+                }
+            }
+        });
+
+        this.showProductionQueue();
+    }
+
+    getSelectedBuildingType() {
+        if (!this.selectedBuildingId) return null;
+        const building = gameState.buildings.find(b => b.id === this.selectedBuildingId);
+        return building ? building.type : null;
+    }
+
+    cancelQueueItem(item) {
+        // Remove item from production queue
+        const index = gameState.productionQueue.indexOf(item);
+        if (index > -1) {
+            gameState.productionQueue.splice(index, 1);
+
+            // Refund resources based on unit type
+            const faction = gameState.faction;
+            if (item.category === 'unit' && faction) {
+                let unitConfig = null;
+                if (item.unitType === 'worker') {
+                    unitConfig = faction.worker;
+                } else if (faction.units[item.unitType]) {
+                    unitConfig = faction.units[item.unitType];
+                }
+
+                if (unitConfig?.cost) {
+                    gameState.minerals += unitConfig.cost.minerals || 0;
+                    gameState.gas += unitConfig.cost.gas || 0;
+                }
+            }
+
+            // Force queue display refresh
+            this.lastQueueKey = null;
+            this.updateProductionQueueDisplay();
+
+            this.showNotification(`Cancelled ${item.name || item.unitType}`);
+        }
     }
 
     showNotification(message) {

@@ -295,6 +295,10 @@ class Game {
         gameState.on('productionComplete', (item) => {
             if (item.category === 'building') {
                 this.buildingRenderer?.completeConstruction(item.buildingId);
+                // Notify AI when building completes
+                this.notifyAIWithChat('build_complete', {
+                    buildingName: item.name || item.type
+                });
             } else if (item.category === 'unit') {
                 // Unit is already added in gameState.completeProduction
                 // We need to create the visual
@@ -306,6 +310,11 @@ class Game {
                         this.unitRenderer.createCombatUnit(newUnit);
                     }
                 }
+                // Notify AI when unit production completes
+                this.notifyAIWithChat('train_complete', {
+                    unitType: item.name || item.unitType,
+                    buildingType: item.producerType
+                });
             }
         });
 
@@ -460,10 +469,11 @@ class Game {
         if (type === 'building') {
             // Show building info and production options
             this.hud?.showBuildingSelection(entity, (unitType) => {
-                const result = this.gameActions.trainUnit(entity.type, unitType);
+                // Pass the building entity so we can track production per-building
+                const result = this.gameActions.trainUnit(entity, unitType);
                 if (result.success) {
                     this.hud?.showNotification(result.message);
-                    this.notifyAIWithChat('train', { unitType, buildingType: entity.type });
+                    // AI notification moved to productionComplete handler
                 } else {
                     this.hud?.showNotification(result.message, 'error');
                 }
@@ -545,6 +555,9 @@ class Game {
 
         // Update HUD
         this.hud?.update();
+
+        // Update production queue display (for progress bars)
+        this.hud?.updateProductionQueueDisplay();
 
         // Update gas geyser visuals (haze fades as gas depletes)
         gameState.gasGeysers.forEach(geyser => {

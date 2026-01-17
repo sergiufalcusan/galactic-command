@@ -377,13 +377,30 @@ export class GameActions {
         }
     }
 
-    trainUnit(buildingType, unitType) {
+    trainUnit(buildingOrType, unitType) {
         const result = { success: false, message: '' };
         const faction = gameState.faction;
 
         if (!faction) {
             result.message = 'No faction selected';
             return result;
+        }
+
+        // Support both building entity and building type (for backwards compatibility)
+        let buildingType, producerId, producerX, producerZ;
+        if (typeof buildingOrType === 'object') {
+            // Building entity passed
+            buildingType = buildingOrType.type;
+            producerId = buildingOrType.id;
+            producerX = buildingOrType.x;
+            producerZ = buildingOrType.z;
+        } else {
+            // Just type passed (legacy/AI calls)
+            buildingType = buildingOrType;
+            const producerBuilding = gameState.buildings.find(b => b.type === buildingType && b.isComplete);
+            producerId = producerBuilding?.id || buildingType;
+            producerX = producerBuilding?.x || 0;
+            producerZ = producerBuilding?.z || 0;
         }
 
         // Special case for Overlords (Zerg supply)
@@ -393,6 +410,7 @@ export class GameActions {
                 result.message = `Not enough resources. Need ${overlordConfig.cost.minerals} minerals`;
                 return result;
             }
+
             gameState.spendResources(overlordConfig.cost);
             gameState.addToProductionQueue({
                 category: 'unit',
@@ -402,7 +420,11 @@ export class GameActions {
                 population: 0,
                 health: 200,
                 isSupplyUnit: true,
-                supplyProvided: overlordConfig.supplyProvided
+                supplyProvided: overlordConfig.supplyProvided,
+                producerId,
+                producerType: 'base',
+                producerX,
+                producerZ
             });
             result.success = true;
             result.message = `Spawning ${overlordConfig.name}`;
@@ -450,7 +472,11 @@ export class GameActions {
             name: unitConfig.name,
             buildTime: unitConfig.buildTime,
             population: populationCost,
-            health: unitConfig.health || 40
+            health: unitConfig.health || 40,
+            producerId,
+            producerType: buildingType,
+            producerX,
+            producerZ
         });
 
         result.success = true;

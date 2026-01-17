@@ -9,7 +9,7 @@
   --bg-darker: #050508;
   --bg-panel: rgba(15, 20, 35, 0.95);
   --bg-panel-hover: rgba(25, 35, 55, 0.95);
-  
+
   /* Accent colors */
   --accent-primary: #00d4ff;
   --accent-secondary: #7b2dff;
@@ -17,40 +17,40 @@
   --accent-success: #00ff88;
   --accent-warning: #ff8800;
   --accent-danger: #ff3366;
-  
+
   /* Faction colors */
   --zerg-primary: #8b00ff;
   --zerg-secondary: #4a0080;
   --zerg-glow: rgba(139, 0, 255, 0.5);
-  
+
   --human-primary: #00aaff;
   --human-secondary: #004488;
   --human-glow: rgba(0, 170, 255, 0.5);
-  
+
   --protoss-primary: #ffcc00;
   --protoss-secondary: #886600;
   --protoss-glow: rgba(255, 204, 0, 0.5);
-  
+
   /* Text colors */
   --text-primary: #ffffff;
   --text-secondary: #a0a8b8;
   --text-muted: #5a6070;
-  
+
   /* Borders */
   --border-color: rgba(100, 120, 160, 0.3);
   --border-glow: rgba(0, 212, 255, 0.5);
-  
+
   /* Typography */
   --font-display: 'Orbitron', sans-serif;
   --font-body: 'Rajdhani', sans-serif;
-  
+
   /* Spacing */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
   --spacing-lg: 24px;
   --spacing-xl: 32px;
-  
+
   /* Animation */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.3s ease;
@@ -58,13 +58,16 @@
 }
 
 /* Reset & Base */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body {
+html,
+body {
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -118,7 +121,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: 
+  background:
     radial-gradient(ellipse at 20% 80%, var(--zerg-glow) 0%, transparent 40%),
     radial-gradient(ellipse at 80% 20%, var(--human-glow) 0%, transparent 40%),
     radial-gradient(ellipse at 50% 50%, var(--protoss-glow) 0%, transparent 50%);
@@ -127,8 +130,15 @@ body {
 }
 
 @keyframes pulse-bg {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 0.4; }
+
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .menu-content {
@@ -160,8 +170,15 @@ body {
 }
 
 @keyframes title-glow {
-  0%, 100% { filter: brightness(1); }
-  50% { filter: brightness(1.2); }
+
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+
+  50% {
+    filter: brightness(1.2);
+  }
 }
 
 .game-subtitle {
@@ -207,7 +224,7 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
   transition: left var(--transition-slow);
 }
 
@@ -407,9 +424,17 @@ body {
   margin-bottom: var(--spacing-sm);
 }
 
-.faction-card[data-faction="zerg"] h3 { color: var(--zerg-primary); }
-.faction-card[data-faction="human"] h3 { color: var(--human-primary); }
-.faction-card[data-faction="protoss"] h3 { color: var(--protoss-primary); }
+.faction-card[data-faction="zerg"] h3 {
+  color: var(--zerg-primary);
+}
+
+.faction-card[data-faction="human"] h3 {
+  color: var(--human-primary);
+}
+
+.faction-card[data-faction="protoss"] h3 {
+  color: var(--protoss-primary);
+}
 
 .faction-desc {
   color: var(--text-secondary);
@@ -476,7 +501,7 @@ body {
   z-index: 10;
 }
 
-#hud > * {
+#hud>* {
   pointer-events: auto;
 }
 
@@ -489,7 +514,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
 }
 
 .resource-panel {
@@ -514,9 +539,17 @@ body {
   font-size: 1.4rem;
 }
 
-.resource.minerals span:last-child { color: #00d4ff; }
-.resource.gas span:last-child { color: #00ff88; }
-.resource.population span:last-child { color: var(--accent-gold); }
+.resource.minerals span:last-child {
+  color: #00d4ff;
+}
+
+.resource.gas span:last-child {
+  color: #00ff88;
+}
+
+.resource.population span:last-child {
+  color: var(--accent-gold);
+}
 
 .game-time {
   font-family: var(--font-display);
@@ -623,6 +656,173 @@ body {
   cursor: not-allowed;
 }
 
+/* Production Queue Panel */
+#production-queue-panel {
+  position: absolute;
+  right: var(--spacing-md);
+  top: 70px;
+  width: 280px;
+  max-height: 400px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  z-index: 20;
+  transition: opacity var(--transition-normal), transform var(--transition-normal);
+}
+
+#production-queue-panel.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(20px);
+}
+
+.queue-header {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.queue-title {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--accent-primary);
+  letter-spacing: 0.05em;
+}
+
+#queue-items {
+  padding: var(--spacing-sm);
+  overflow-y: auto;
+  max-height: 350px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  min-height: 50px;
+  animation: queue-item-in 0.3s ease;
+}
+
+@keyframes queue-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.queue-item-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--bg-darker);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.queue-item-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-item-name {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item-progress {
+  height: 6px;
+  background: var(--bg-darker);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.queue-item-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+.queue-item-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.queue-empty {
+  text-align: center;
+  padding: var(--spacing-md);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.queue-item-cancel {
+  background: rgba(255, 80, 80, 0.2);
+  border: 1px solid rgba(255, 80, 80, 0.4);
+  color: #ff5050;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  font-weight: bold;
+  transition: all 0.2s ease;
+}
+
+.queue-item-cancel:hover {
+  background: rgba(255, 80, 80, 0.4);
+  border-color: #ff5050;
+  transform: scale(1.1);
+}
+
+.queue-item-status {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ========================================
    CHAT INTERFACE
    ======================================== */
@@ -703,6 +903,7 @@ body {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -789,24 +990,24 @@ body {
   .game-title {
     font-size: 3rem;
   }
-  
+
   .game-title span {
     font-size: 1.8rem;
   }
-  
+
   .faction-cards {
     gap: var(--spacing-md);
   }
-  
+
   .faction-card {
     width: 260px;
     padding: var(--spacing-md);
   }
-  
+
   #chat-container {
     width: 300px;
   }
-  
+
   #minimap {
     width: 150px;
     height: 150px;
@@ -817,31 +1018,31 @@ body {
   .game-title {
     font-size: 2rem;
   }
-  
+
   .game-title span {
     font-size: 1.2rem;
   }
-  
+
   .faction-cards {
     flex-direction: column;
     align-items: center;
   }
-  
+
   .resource-panel {
     gap: var(--spacing-sm);
   }
-  
+
   .resource {
     font-size: 1rem;
     padding: var(--spacing-xs) var(--spacing-sm);
   }
-  
+
   #chat-container {
     width: calc(100% - 220px);
     right: var(--spacing-sm);
     bottom: var(--spacing-sm);
   }
-  
+
   #selection-panel {
     width: calc(100% - 430px);
     left: 220px;
