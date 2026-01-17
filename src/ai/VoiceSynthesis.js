@@ -52,6 +52,7 @@ export class VoiceSynthesis {
         this.isSpeaking = false;
         this.audioQueue = [];
         this.currentAudio = null;
+        this.generation = 0;
 
         // Audio context for processing
         this.audioContext = null;
@@ -66,7 +67,7 @@ export class VoiceSynthesis {
         this.voiceId = voiceId;
     }
 
-    async speak(text) {
+    async speak(text, interrupt = true) {
         if (!this.isEnabled) {
             return false;
         }
@@ -85,18 +86,25 @@ export class VoiceSynthesis {
             return false;
         }
 
+        // Interrupt current playback and clear queue if specified
+        if (interrupt) {
+            this.stop();
+        }
+
         // Add to queue
         this.audioQueue.push(cleanText);
 
         // Process queue if not already speaking
         if (!this.isSpeaking) {
-            this.processQueue();
+            this.processQueue(this.generation);
         }
 
         return true;
     }
 
-    async processQueue() {
+    async processQueue(gen) {
+        if (gen !== this.generation) return;
+
         if (this.audioQueue.length === 0) {
             this.isSpeaking = false;
             return;
@@ -107,6 +115,10 @@ export class VoiceSynthesis {
 
         try {
             const audioData = await this.generateSpeech(text);
+
+            // Check generation again after await
+            if (gen !== this.generation) return;
+
             if (audioData) {
                 await this.playAudio(audioData);
             }
@@ -115,7 +127,9 @@ export class VoiceSynthesis {
         }
 
         // Process next in queue
-        this.processQueue();
+        if (gen === this.generation) {
+            this.processQueue(gen);
+        }
     }
 
     async generateSpeech(text) {
@@ -166,30 +180,45 @@ export class VoiceSynthesis {
             }
 
             this.currentAudio = audio;
+            this.resolvePlay = resolve;
 
             audio.onended = () => {
                 URL.revokeObjectURL(url);
                 this.currentAudio = null;
+                this.resolvePlay = null;
                 resolve();
             };
 
             audio.onerror = (error) => {
                 URL.revokeObjectURL(url);
                 this.currentAudio = null;
+                this.resolvePlay = null;
                 reject(error);
             };
 
-            audio.play().catch(reject);
+            audio.play().catch((err) => {
+                this.resolvePlay = null;
+                reject(err);
+            });
         });
     }
 
     stop() {
+        this.generation++;
+
         if (this.currentAudio) {
             this.currentAudio.pause();
+            this.currentAudio.src = ''; // Force stop and release resources
             this.currentAudio = null;
         }
+
         this.audioQueue = [];
         this.isSpeaking = false;
+
+        if (this.resolvePlay) {
+            this.resolvePlay();
+            this.resolvePlay = null;
+        }
     }
 
     setEnabled(enabled) {
