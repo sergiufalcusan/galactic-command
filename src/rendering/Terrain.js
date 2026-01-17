@@ -12,15 +12,15 @@ export class TerrainRenderer {
         this.resourceNodes = new Map();
 
         // Preload resource models
-        this.preloadModels();
+        this.preloadResources();
     }
 
-    async preloadModels() {
-        await modelLoader.preloadModels([
+    async preloadResources() {
+        const modelsToLoad = [
             '/models/mineral.glb',
             '/models/geyser.glb'
-        ]);
-        console.log('[TerrainRenderer] Resource models preloaded');
+        ];
+        await modelLoader.preloadModels(modelsToLoad);
     }
 
     createTerrain() {
@@ -166,7 +166,7 @@ export class TerrainRenderer {
 
             group.add(model);
         } catch (error) {
-            console.warn(`[TerrainRenderer] Failed to load resource model ${path}:`, error);
+            console.error(`[TerrainRenderer] Failed to load resource model ${path}:`, error);
         }
     }
 

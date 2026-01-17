@@ -76,7 +76,7 @@ export class UnitRenderer {
 
             group.add(model);
         } catch (error) {
-            console.warn('[UnitRenderer] Failed to load worker model, using fallback');
+            console.error('[UnitRenderer] Failed to load worker model, using fallback');
             group.add(this.createFallbackWorker());
         }
 
@@ -134,7 +134,7 @@ export class UnitRenderer {
 
             group.add(model);
         } catch (error) {
-            console.warn('[UnitRenderer] Failed to load combat model, using fallback');
+            console.error('[UnitRenderer] Failed to load combat model, using fallback');
             group.add(this.createFallbackCombatUnit());
         }
 

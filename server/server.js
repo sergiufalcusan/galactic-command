@@ -15,11 +15,11 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
 // Validate required API keys on startup
-if (!OPENAI_API_KEY) {
-    console.warn('⚠️  OPENAI_API_KEY not set - OpenAI endpoints will fail');
+if (!process.env.OPENAI_API_KEY) {
+    console.error('⚠️  OPENAI_API_KEY not set - OpenAI endpoints will fail');
 }
-if (!ELEVENLABS_API_KEY) {
-    console.warn('⚠️  ELEVENLABS_API_KEY not set - ElevenLabs endpoints will fail');
+if (!process.env.ELEVENLABS_API_KEY) {
+    console.error('⚠️  ELEVENLABS_API_KEY not set - ElevenLabs endpoints will fail');
 }
 
 // CORS - allow requests from your frontend
@@ -108,7 +108,5 @@ app.post('/api/elevenlabs/tts/:voiceId', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Galactic Command Server running on port ${PORT}`);
-    console.log(`   Health: http://localhost:${PORT}/health`);
-    console.log(`   OpenAI: http://localhost:${PORT}/api/openai/chat/completions`);
+    // Server started
 });

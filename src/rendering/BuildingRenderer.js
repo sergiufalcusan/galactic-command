@@ -148,7 +148,7 @@ export class BuildingRenderer {
 
             group.add(model);
         } catch (error) {
-            console.warn(`[BuildingRenderer] Failed to load building model ${type} (normalized: ${normalizedType}):`, error);
+            console.error(`[BuildingRenderer] Failed to load building model ${type} (normalized: ${normalizedType}):`, error);
             group.add(this.createFallbackBuilding(normalizedType));
         }
     }
@@ -298,7 +298,7 @@ export class BuildingRenderer {
                 }
             });
         } else {
-            console.warn('[BuildingRenderer] Could not complete construction - building or overlay not found');
+            console.error('[BuildingRenderer] Could not complete construction - building or overlay not found');
         }
     }
 

@@ -211,7 +211,6 @@ class Game {
         // Initialize AI agent
         this.aiAgent = new AIAgent(gameState.faction, (action) => {
             const result = this.gameActions.executeAction(action);
-            console.log('Action result:', result);
         });
 
         // Check if using backend proxy (API key is on server)

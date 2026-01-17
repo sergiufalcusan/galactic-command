@@ -99,7 +99,7 @@ class ModelLoader {
      */
     async preloadModels(paths) {
         const promises = paths.map(path => this.load(path).catch(e => {
-            console.warn(`Could not preload: ${path}`);
+            console.error(`Could not preload: ${path}`, e);
             return null;
         }));
         return Promise.all(promises);
