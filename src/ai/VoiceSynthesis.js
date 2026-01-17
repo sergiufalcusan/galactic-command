@@ -64,35 +64,23 @@ export class VoiceSynthesis {
     }
 
     async speak(text) {
-        console.log('[Voice] speak called:', {
-            isEnabled: this.isEnabled,
-            hasApiKey: !!this.apiKey,
-            text: text?.substring(0, 50)
-        });
-
         if (!this.isEnabled) {
-            console.log('[Voice] Not enabled - check Settings to enable voice');
             return false;
         }
 
         if (!this.apiKey) {
-            console.log('[Voice] No API key set - add ElevenLabs key in Settings');
             return false;
         }
 
         if (!text) {
-            console.log('[Voice] No text to speak');
             return false;
         }
 
         // Clean text of action commands
         const cleanText = text.replace(/\[ACTION:\w+:?\w*\]/g, '').trim();
         if (!cleanText) {
-            console.log('[Voice] No text after cleaning action commands');
             return false;
         }
-
-        console.log('[Voice] Adding to queue:', cleanText.substring(0, 50));
 
         // Add to queue
         this.audioQueue.push(cleanText);
@@ -113,14 +101,11 @@ export class VoiceSynthesis {
 
         this.isSpeaking = true;
         const text = this.audioQueue.shift();
-        console.log('[Voice] Processing:', text.substring(0, 50));
 
         try {
             const audioData = await this.generateSpeech(text);
             if (audioData) {
-                console.log('[Voice] Audio generated, playing...');
                 await this.playAudio(audioData);
-                console.log('[Voice] Audio finished playing');
             }
         } catch (error) {
             console.error('[Voice] Synthesis error:', error);
@@ -132,7 +117,6 @@ export class VoiceSynthesis {
 
     async generateSpeech(text) {
         const url = `${ELEVENLABS_API_URL}/${this.voiceId}`;
-        console.log('[Voice] Calling ElevenLabs API:', url);
 
         // Build headers - only include API key if not using proxy
         const headers = {

@@ -160,12 +160,17 @@ class Game {
     }
 
     cleanup() {
-        console.log('[Game] Cleaning up existing systems...');
         this.stopGame();
 
         if (this.inputHandler) this.inputHandler.dispose();
         if (this.hud) this.hud.dispose();
-        if (this.chatInterface) this.chatInterface.dispose();
+        if (this.chatInterface) {
+            try {
+                this.chatInterface.dispose();
+            } catch (e) {
+                console.error('[Game] Error disposing chatInterface:', e);
+            }
+        }
         if (this.aiAgent) this.aiAgent.dispose();
 
         if (this.unitRenderer) this.unitRenderer.dispose();
@@ -181,8 +186,6 @@ class Game {
     }
 
     startNewGame(factionId) {
-        console.log('Starting new game with faction:', factionId);
-
         // Pre-cleanup
         this.cleanup();
 
@@ -283,7 +286,6 @@ class Game {
 
     loadGame() {
         if (gameState.load()) {
-            console.log('Game loaded successfully');
 
             // Pre-cleanup before loading
             this.cleanup();
@@ -307,7 +309,6 @@ class Game {
             // Initialize AI agent
             this.aiAgent = new AIAgent(gameState.faction, (action) => {
                 const result = this.gameActions.executeAction(action);
-                console.log('Action result:', result);
             });
 
             // Check if using backend proxy (API key is on server)
@@ -438,7 +439,6 @@ class Game {
     }
 
     onBuildingCreated(building) {
-        console.log('[Game] onBuildingCreated called:', building);
         this.buildingRenderer.createBuilding(building);
     }
 

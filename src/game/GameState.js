@@ -412,7 +412,6 @@ class GameState {
                     );
                     if (geyser) {
                         geyser.hasExtractor = true;
-                        console.log('[GameState] Gas extractor complete, geyser enabled:', geyser.id);
                     }
                 }
             }

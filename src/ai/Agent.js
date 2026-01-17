@@ -19,6 +19,8 @@ export class AIAgent {
         this.conversationHistory = [];
         this.apiKey = null;
         this.isProcessing = false;
+        this.isDisposed = false; // Flag to prevent actions after disposal
+        this.abortController = null; // For canceling pending requests
 
         // Voice synthesis
         this.voice = new VoiceSynthesis(faction.id);
@@ -76,7 +78,6 @@ Example speech:
         };
 
         const personality = factionPersonalities[factionInfo.id] || factionPersonalities.human;
-
         return `${personality}
 
 You are advising a player in Galactic Command, a real-time strategy game.
@@ -133,6 +134,11 @@ RULES:
                 response = await this.callOpenAI(gameContext, userMessage);
             } else {
                 response = this.generateLocalResponse(userMessage);
+            }
+
+            // Check if agent was disposed while waiting for response
+            if (this.isDisposed) {
+                return { text: '', actions: [] };
             }
 
             // Add assistant response to history
@@ -393,6 +399,14 @@ Current game state:
     }
 
     dispose() {
+        this.isDisposed = true; // Prevent any pending responses from executing
+
+        // Abort any pending API requests
+        if (this.abortController) {
+            this.abortController.abort();
+            this.abortController = null;
+        }
+
         this.reset();
         if (this.voice) {
             this.voice.dispose();

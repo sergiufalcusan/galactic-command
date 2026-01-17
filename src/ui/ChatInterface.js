@@ -50,7 +50,8 @@ export class ChatInterface {
         // Add initial greeting
         if (this.agent) {
             setTimeout(() => {
-                this.addMessage(this.agent.getGreeting(), 'ai');
+                const greeting = this.agent.getGreeting();
+                this.addMessage(greeting, 'ai');
             }, 500);
         }
     }
@@ -60,6 +61,10 @@ export class ChatInterface {
             this.sendButton.removeEventListener('click', this.handlers.onSend);
             this.inputField.removeEventListener('keypress', this.handlers.onKeyPress);
             this.toggleButton.removeEventListener('click', this.handlers.onToggle);
+        }
+        // Clear chat messages when switching games
+        if (this.messagesContainer) {
+            this.messagesContainer.innerHTML = '';
         }
     }
 
@@ -170,10 +175,6 @@ export class ChatInterface {
 
     clear() {
         this.messagesContainer.innerHTML = '';
-    }
-
-    dispose() {
-        // Remove event listeners would go here
     }
 }
 

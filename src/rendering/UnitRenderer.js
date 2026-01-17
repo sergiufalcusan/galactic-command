@@ -56,7 +56,6 @@ export class UnitRenderer {
 
         await modelLoader.preloadModels(modelsToLoad);
         this.modelsLoaded = true;
-        console.log('[UnitRenderer] Models preloaded');
     }
 
     async createWorker(unitData) {

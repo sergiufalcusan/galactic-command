@@ -44,15 +44,25 @@ export class BuildingRenderer {
     async preloadModels() {
         const modelsToLoad = Object.values(BUILDING_MODELS);
         await modelLoader.preloadModels(modelsToLoad);
-        console.log('[BuildingRenderer] Models preloaded');
     }
 
     createBuilding(buildingData) {
-        console.log('[BuildingRenderer] createBuilding:', buildingData);
 
         const group = new THREE.Group();
         group.position.set(buildingData.x, 0, buildingData.z);
         group.userData.buildingData = buildingData;
+
+        // Add invisible hitbox for click detection (covers entire building)
+        const hitboxSize = buildingData.type === 'base' ? 6 : 4;
+        const hitboxHeight = buildingData.type === 'base' ? 4 : 3;
+        const hitboxGeometry = new THREE.BoxGeometry(hitboxSize, hitboxHeight, hitboxSize);
+        const hitboxMaterial = new THREE.MeshBasicMaterial({
+            visible: false // Invisible but still raycastable
+        });
+        const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
+        hitbox.position.y = hitboxHeight / 2; // Raise to cover building height
+        hitbox.userData.buildingData = buildingData; // Copy userData for raycast detection
+        group.add(hitbox);
 
         // Load the appropriate model asynchronously
         this.loadBuildingModel(group, buildingData.type);
