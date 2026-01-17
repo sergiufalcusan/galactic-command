@@ -48,19 +48,39 @@ Example speech:
 - "Weakness disgusts us. Expand or perish."
 - "More drones! The minerals call to us... we shall consume them ALL."`,
 
-            human: `You are COMMANDER, a grizzled military officer advising a Terran base. You speak in military jargon with a passive-aggressive, slightly sarcastic tone. You're competent but have a chip on your shoulder.
+            human: `You are COMMANDER JENKINS, a weary, coffee-addicted military officer who has seen too much... mostly incompetent recruits and budget meetings. You speak with heavy sarcasm, passive-aggressiveness, and existential acceptance of human flaws.
 
 SPEECH STYLE:
-- Use military terminology: "roger", "copy that", "affirmative", "negative", "sitrep"
-- Be subtly condescending - you've seen rookies make mistakes before
-- Add backhanded comments when the player makes suboptimal choices
-- Reference "standard operating procedure" and protocols
-- Occasionally mutter complaints (in parentheses)
+- Use military jargon mixed with tired resignation: "roger", "copy that", "affirmative", "negative", "sitrep"
+- Be sarcastically self-aware about human nature - we're lazy, easily distracted, addicted to coffee, and somehow survived this long
+- Reference real human flaws: procrastination, forgetting why we walked into a room, needing three alarms to wake up, spending meeting time on meetings about meetings
+- Make passive-aggressive comments about how humans need "motivation" (read: deadlines and panic)
+- Occasionally mutter complaints (in parentheses) about humanity
+- Express baffled amazement that humans conquered space despite our collective flaws
+
+IMPORTANT - VARY YOUR SENTENCE STARTERS! Never start with the same phrase twice in a row. Use diverse openers like:
+- "Roger.", "Copy that.", "Affirmative.", "Well well well...", "Look at that!", "Outstanding.", "Huh.", "Finally!", "Great.", "Interesting...", "Oh boy.", "Here we go.", "Solid.", "Nice.", "Whoa.", "Hot damn.", "Would you look at that.", "Check it out.", "Boom.", "*sigh*", "Okay okay.", "Alright then.", "Sure thing.", "You got it.", "Fair enough.", "Not bad.", "I see.", "Noted."
+
+AVOID: Starting every response with "Ah yes" or "Ah," - be unpredictable!
+
+REAL WORLD REFERENCES TO USE:
+- Coffee/caffeine dependency ("No minerals until coffee break is over")
+- Procrastination ("We'll definitely do that... right after this other thing... and maybe a nap")
+- Meetings and bureaucracy ("I need to fill out Form 27-B to request the form that lets us build")
+- Monday hatred, Friday energy, weekend waiting
+- Forgetting things immediately ("Where did I put those blueprints... I just had them...")
+- Social media distraction, doom scrolling during work hours
+- The fact that we invented both space travel AND couldn't agree on a universal phone charger
+- "That's a problem for future us"
+- Workers needing bathroom breaks, lunch breaks, and "mental health walks"
 
 Example speech:
-- "Copy that. Building supply depot... (not like we needed those minerals)"
-- "Affirmative. Though in MY experience, more marines wouldn't hurt."
-- "Sure, we can do that. Just don't blame me when it goes sideways."`,
+- "Copy that. Building supply depot... (not like we needed those minerals for ANYTHING else)"
+- "Finally, MORE workers. Because obviously the six we have are 'taking a personal day.'"
+- "Sure, we could rush... or we could do it 'human style' and panic later. Your call."
+- "Roger. Nothing motivates an SCV quite like a looming deadline and three energy drinks."
+- "You want efficiency? Sir, we're HUMANS. Our ancestors invented the wheel and then someone said 'but what if it was square.'"
+- "Solid. Sending workers to mine. They'll get there after their coffee break."`,
 
             protoss: `You are EXECUTOR, a wise and ancient Protoss advisor. You speak with profound respect, honor, and ancient wisdom. You treat the player as a revered leader worthy of great respect.
 
@@ -179,6 +199,24 @@ Current game state:
 - Buildings: ${state.buildings.map(b => b.name).join(', ') || 'None'}
 - Game time: ${state.gameTime}
 - Gas extractors built: ${gameState.gasGeysers.filter(g => g.hasExtractor).length}/2`;
+    }
+
+    getUnitCounts() {
+        const units = gameState.units;
+        const counts = {};
+
+        units.forEach(unit => {
+            const type = unit.name || unit.type;
+            counts[type] = (counts[type] || 0) + 1;
+        });
+
+        if (Object.keys(counts).length === 0) {
+            return 'No units yet';
+        }
+
+        return Object.entries(counts)
+            .map(([type, count]) => `${count} ${type}${count > 1 ? 's' : ''}`)
+            .join(', ');
     }
 
     async callOpenAI(gameContext, userMessage) {
@@ -348,16 +386,67 @@ Current game state:
         if (this.isProcessing) return null;
 
         const actionDescriptions = {
-            'build': `The player just built a ${details.buildingName || details.type}`,
+            'build': `The player just successfully built a ${details.buildingName || details.type}`,
             'mine_minerals': `The player assigned ${details.count || 1} worker(s) to mine minerals`,
             'harvest_gas': `The player assigned ${details.count || 1} worker(s) to harvest vespene gas`,
             'move_units': `The player moved ${details.count || 1} unit(s) to a new location`,
-            'produce_unit': `The player started producing a ${details.unitType || 'unit'}`
+            'train': `The player started training a ${details.unitType || 'unit'} from the ${details.buildingType || 'base'}`
         };
 
         const actionDescription = actionDescriptions[actionType] || `The player performed: ${actionType}`;
 
-        // Quick local response based on faction personality (no API call needed for quick feedback)
+        // Use API to generate original responses if available
+        if (this.apiKey) {
+            this.isProcessing = true;
+            try {
+                // Get current game context for accurate responses
+                const gameContext = this.getGameContext();
+
+                // Include specific unit counts for accuracy
+                const unitCounts = this.getUnitCounts();
+                const contextSummary = `Current army: ${unitCounts}`;
+
+                const feedbackPrompt = `${actionDescription}.
+${contextSummary}
+Give a SHORT (1 sentence max, under 15 words) reaction in character. Be creative and funny - NEVER repeat the same response twice. Be accurate about unit counts (e.g., if this is the FIRST marine, don't say "another"). Don't use action commands.`;
+
+                const messages = [
+                    { role: 'system', content: this.systemPrompt },
+                    { role: 'system', content: gameContext },
+                    { role: 'user', content: feedbackPrompt }
+                ];
+
+                const headers = { 'Content-Type': 'application/json' };
+                if (!API_BASE_URL && this.apiKey) {
+                    headers['Authorization'] = `Bearer ${this.apiKey}`;
+                }
+
+                const response = await fetch(OPENAI_API_URL, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({
+                        model: 'gpt-4o-mini',
+                        messages: messages,
+                        max_tokens: 60,
+                        temperature: 0.95 // Higher temperature for more variety
+                    })
+                });
+
+                this.isProcessing = false;
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const aiResponse = this.cleanResponseText(data.choices[0].message.content);
+                    this.voice.speak(aiResponse);
+                    return { text: aiResponse, actions: [] };
+                }
+            } catch (error) {
+                console.error('AI feedback error:', error);
+                this.isProcessing = false;
+            }
+        }
+
+        // Fallback to static responses if API unavailable
         const quickResponses = this.getQuickFeedback(actionType, details);
         if (quickResponses) {
             const response = quickResponses[Math.floor(Math.random() * quickResponses.length)];
@@ -377,21 +466,21 @@ Current game state:
                 'mine_minerals': ['Feed the Swarm! More minerals!', 'The drones obey... GOOD.', 'Essence shall flow!'],
                 'harvest_gas': ['The gas feeds our evolution!', 'Vespene... we hunger for its power!', 'The extractors serve us well!'],
                 'move_units': ['The Swarm moves as one!', 'We spread across the land...', 'Nothing escapes our reach!'],
-                'produce_unit': ['Another joins the endless Swarm!', 'More for the hive!', 'We grow STRONGER!']
+                'train': ['Another joins the endless Swarm!', 'More for the hive!', 'We grow STRONGER!']
             },
             human: {
-                'build': ['Copy that, structure going up.', 'Not bad, rookie. Keep it up.', 'Construction initiated. Finally.'],
-                'mine_minerals': ['Workers assigned. Smart move.', 'Good call on the minerals.', 'Roger, workers are on it.'],
-                'harvest_gas': ['Gas operations underway.', 'About time we got that gas flowing.', 'Refinery operations confirmed.'],
+                'build': ['Copy that, structure going up.', 'Construction initiated.', 'Building in progress.'],
+                'mine_minerals': ['Workers assigned to minerals.', 'Mining operations underway.', 'Roger, workers are on it.'],
+                'harvest_gas': ['Gas operations underway.', 'Refinery operations confirmed.', 'Gas collection started.'],
                 'move_units': ['Units repositioned.', 'Movement orders received.', 'Copy that, units en route.'],
-                'produce_unit': ['Training in progress.', 'New recruit incoming.', 'Unit production authorized.']
+                'train': ['Training in progress.', 'New recruit incoming.', 'Unit production authorized.']
             },
             protoss: {
                 'build': ['En taro Adun! A wise construction.', 'The light of Aiur guides your hand.', 'A noble structure rises!'],
                 'mine_minerals': ['The Probes serve with honor.', 'Resources flow for our glory!', 'By your will, Executor.'],
                 'harvest_gas': ['Vespene shall fuel our triumph!', 'The Assimilator hums with purpose.', 'Blessed be this harvest!'],
                 'move_units': ['Our warriors move with purpose.', 'The Khala guides their path.', 'A tactical repositioning!'],
-                'produce_unit': ['A new warrior is forged!', 'Strength joins our ranks!', 'For Aiur, another defender rises!']
+                'train': ['A new warrior is forged!', 'Strength joins our ranks!', 'For Aiur, another defender rises!']
             }
         };
 

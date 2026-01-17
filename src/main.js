@@ -144,7 +144,7 @@ class Game {
             if (result.success) {
                 this.hud?.showNotification(result.message);
                 // Notify AI of player's action for feedback
-                this.aiAgent?.notifyPlayerAction('build', { type, buildingName: result.message });
+                this.notifyAIWithChat('build', { type, buildingName: result.message });
             } else {
                 this.hud?.showNotification(result.message, 'error');
             }
@@ -268,7 +268,7 @@ class Game {
 
         // Connect player actions to AI feedback
         this.inputHandler.onPlayerAction = (actionType, details) => {
-            this.aiAgent?.notifyPlayerAction(actionType, details);
+            this.notifyAIWithChat(actionType, details);
         };
 
         // Create initial game objects
@@ -370,7 +370,7 @@ class Game {
 
             // Connect player actions to AI feedback
             this.inputHandler.onPlayerAction = (actionType, details) => {
-                this.aiAgent?.notifyPlayerAction(actionType, details);
+                this.notifyAIWithChat(actionType, details);
             };
 
             // Recreate game objects from saved state
@@ -446,7 +446,7 @@ class Game {
                 const result = this.gameActions.trainUnit(entity.type, unitType);
                 if (result.success) {
                     this.hud?.showNotification(result.message);
-                    this.aiAgent?.notifyPlayerAction('train', { unitType, buildingType: entity.type });
+                    this.notifyAIWithChat('train', { unitType, buildingType: entity.type });
                 } else {
                     this.hud?.showNotification(result.message, 'error');
                 }
@@ -466,6 +466,16 @@ class Game {
             this.unitRenderer.createWorker(unit);
         } else {
             this.unitRenderer.createCombatUnit(unit);
+        }
+    }
+
+    // Helper to notify AI and display response in chat
+    async notifyAIWithChat(actionType, details) {
+        if (!this.aiAgent) return;
+
+        const response = await this.aiAgent.notifyPlayerAction(actionType, details);
+        if (response && response.text && this.chatInterface) {
+            this.chatInterface.addMessage(response.text, 'ai');
         }
     }
 
