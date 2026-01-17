@@ -106,7 +106,7 @@ export class InputHandler {
         }
 
         if (unitIntersects.length > 0) {
-            const hitObject = this.findParentWithUserData(unitIntersects[0].object);
+            const hitObject = this.findEntityObject(unitIntersects[0].object);
             if (hitObject && hitObject.userData.unitData) {
                 this.selectUnit(hitObject.userData.unitData.id);
                 this.notifySelectionChange();
@@ -119,7 +119,7 @@ export class InputHandler {
         const buildingIntersects = this.raycast(buildingObjects);
 
         if (buildingIntersects.length > 0) {
-            const hitObject = this.findParentWithUserData(buildingIntersects[0].object);
+            const hitObject = this.findEntityObject(buildingIntersects[0].object);
             if (hitObject && hitObject.userData.buildingData) {
                 this.selectBuilding(hitObject.userData.buildingData.id);
                 this.notifySelectionChange();
@@ -140,11 +140,18 @@ export class InputHandler {
         const intersects = this.raycast(targetObjects);
 
         if (intersects.length > 0) {
-            const hitObject = this.findParentWithUserData(intersects[0].object);
-            const clickPoint = intersects[0].point;
+            // Find the closest non-terrain object first
+            const entityHit = intersects.find(hit => {
+                const obj = this.findEntityObject(hit.object);
+                return obj && (obj.userData.unitData || obj.userData.buildingData || obj.userData.type === 'mineral' || obj.userData.type === 'gas');
+            });
+
+            const primaryHit = entityHit || intersects[0];
+            const hitObject = this.findEntityObject(primaryHit.object);
+            const clickPoint = primaryHit.point;
 
             if (hitObject) {
-                // Check if it's a mineral patch - extract the resource ID
+                // Check if it's a mineral patch
                 const resourceId = hitObject.userData?.id || hitObject.parent?.userData?.id;
                 const nodeData = this.terrainRenderer.resourceNodes.get(resourceId);
 
@@ -156,6 +163,15 @@ export class InputHandler {
                 else if (hitObject.userData?.type === 'gas' || nodeData?.type === 'gas') {
                     this.commandHarvestGas(resourceId);
                     return;
+                }
+                // Check if it's a building under construction
+                else if (hitObject.userData?.buildingData) {
+                    const bData = hitObject.userData.buildingData;
+                    const building = gameState.buildings.find(b => b.id === bData.id);
+                    if (building && !building.isComplete && gameState.faction.id === 'human') {
+                        this.commandConstruct(building.id);
+                        return;
+                    }
                 }
             }
 
@@ -367,15 +383,20 @@ export class InputHandler {
         return objects;
     }
 
-    findParentWithUserData(object) {
+    findEntityObject(object) {
         let current = object;
         while (current) {
-            if (current.userData && Object.keys(current.userData).length > 0) {
+            if (current.userData && (
+                current.userData.unitData ||
+                current.userData.buildingData ||
+                current.userData.type === 'mineral' ||
+                current.userData.type === 'gas'
+            )) {
                 return current;
             }
             current = current.parent;
         }
-        return object;
+        return null;
     }
 
     selectUnit(unitId) {
@@ -500,8 +521,34 @@ export class InputHandler {
                 unit.state = 'moving';
                 unit.targetX = x;
                 unit.targetZ = z;
+                unit.targetBuildingId = null; // Clear construction target
             }
         });
+    }
+
+    commandConstruct(buildingId) {
+        const building = gameState.buildings.find(b => b.id === buildingId);
+        if (!building) return;
+
+        let assigned = 0;
+        this.selectedUnits.forEach(unitId => {
+            const unit = gameState.units.find(u => u.id === unitId);
+            if (unit && unit.type === 'worker') {
+                // Clear other assignments
+                gameState.mineralWorkers = gameState.mineralWorkers.filter(id => id !== unitId);
+                gameState.gasWorkers = gameState.gasWorkers.filter(id => id !== unitId);
+
+                unit.state = 'constructing';
+                unit.targetBuildingId = buildingId;
+                unit.targetX = building.x;
+                unit.targetZ = building.z;
+                assigned++;
+            }
+        });
+
+        if (assigned > 0) {
+            this.showFeedback(`${assigned} workers assigned to construction`);
+        }
     }
 
     showFeedback(message) {

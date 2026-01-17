@@ -208,6 +208,11 @@ class Game {
             (unit) => this.onUnitCreated(unit)
         );
 
+        // Listen for unit removal
+        gameState.on('unitRemoved', (unit) => {
+            this.unitRenderer?.removeUnit(unit.id);
+        });
+
         // Initialize AI agent
         this.aiAgent = new AIAgent(gameState.faction, (action) => {
             const result = this.gameActions.executeAction(action);
@@ -304,6 +309,11 @@ class Game {
                 (building) => this.onBuildingCreated(building),
                 (unit) => this.onUnitCreated(unit)
             );
+
+            // Listen for unit removal
+            gameState.on('unitRemoved', (unit) => {
+                this.unitRenderer?.removeUnit(unit.id);
+            });
 
             // Initialize AI agent
             this.aiAgent = new AIAgent(gameState.faction, (action) => {
@@ -499,6 +509,9 @@ class Game {
         // Update HUD
         this.hud?.update();
 
+        // Check Human SCV proximity for construction
+        this.checkHumanConstruction();
+
         // Update construction progress visuals
         this.updateBuildingConstruction();
 
@@ -514,12 +527,59 @@ class Game {
         gameState.productionQueue.forEach(item => {
             if (item.category === 'building' && item.buildingId) {
                 const progress = item.progress / item.buildTime;
-                const remaining = item.buildTime - item.progress;
+
+                // Calculate actual time remaining based on speed multiplier
+                const multiplier = item.speedMultiplier || 1.0;
+                const workRemaining = Math.max(0, item.buildTime - item.progress);
+                const timeRemaining = workRemaining / multiplier;
+
                 this.buildingRenderer?.updateConstructionProgress(
                     item.buildingId,
                     progress,
-                    remaining
+                    timeRemaining,
+                    item.isPaused || false
                 );
+            }
+        });
+    }
+
+    checkHumanConstruction() {
+        if (gameState.faction?.id !== 'human') return;
+
+        // Group all constructing workers by their target building once per frame
+        const buildersByBuilding = new Map();
+        gameState.units.forEach(u => {
+            if (u.type === 'worker' && u.state === 'constructing' && u.targetBuildingId) {
+                if (!buildersByBuilding.has(u.targetBuildingId)) {
+                    buildersByBuilding.set(u.targetBuildingId, []);
+                }
+                buildersByBuilding.get(u.targetBuildingId).push(u);
+            }
+        });
+
+        gameState.productionQueue.forEach(item => {
+            if (item.category === 'building' && item.buildingId) {
+                const building = gameState.buildings.find(b => b.id === item.buildingId);
+                if (!building) return;
+
+                const builders = buildersByBuilding.get(item.buildingId) || [];
+
+                // Filter to those actually in range
+                const activeBuilders = builders.filter(builder => {
+                    const dx = builder.x - building.x;
+                    const dz = builder.z - building.z;
+                    // Using squared distance to avoid Math.sqrt per check
+                    return (dx * dx + dz * dz) <= 9.0; // range = 3.0
+                });
+
+                if (activeBuilders.length > 0) {
+                    item.isPaused = false;
+                    // Speed bonus: 100% for first, +50% for each additional
+                    item.speedMultiplier = 1.0 + (activeBuilders.length - 1) * 0.5;
+                } else {
+                    item.isPaused = true;
+                    item.speedMultiplier = 0;
+                }
             }
         });
     }
@@ -552,6 +612,14 @@ class Game {
                         const offsetRadius = 2.0;
                         targetX = geyser.x + Math.cos(angle) * offsetRadius;
                         targetZ = geyser.z + Math.sin(angle) * offsetRadius;
+                    }
+                } else if (unit.state === 'constructing') {
+                    if (unit.constructionData) {
+                        targetX = unit.constructionData.x;
+                        targetZ = unit.constructionData.z;
+                    } else if (unit.targetBuildingId) {
+                        targetX = unit.targetX;
+                        targetZ = unit.targetZ;
                     }
                 }
             }
@@ -592,6 +660,15 @@ class Game {
                         unit.state = 'idle';
                         unit.targetX = undefined;
                         unit.targetZ = undefined;
+                    } else if (unit.state === 'constructing') {
+                        if (gameState.faction?.id === 'zerg') {
+                            // Zerg drone arrived at site - CONSUME and BUILD
+                            const constructionData = unit.constructionData;
+                            gameState.removeUnit(unit.id);
+                            this.gameActions?.startZergConstruction(constructionData);
+                        }
+                        // For Human, we stay in constructing state and standing still
+                        // No further action needed here as checkHumanConstruction handles unpausing
                     }
                 }
             }

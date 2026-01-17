@@ -19,7 +19,7 @@ export class GameActions {
             case 'BUILD':
                 return this.buildStructure(action.target);
             case 'PRODUCE':
-                return this.produceUnit(action.target);
+                return this.trainUnit('base', action.target);
             case 'MINE':
                 return this.assignMining(count);
             case 'HARVEST_GAS':
@@ -145,6 +145,106 @@ export class GameActions {
             return result;
         }
 
+        // Special Human logic: SCV must go to site and stay there
+        if (faction.id === 'human') {
+            // Find an SCV
+            let scv = gameState.getIdleWorkers()[0];
+            if (!scv && gameState.mineralWorkers.length > 0) {
+                // Take one from minerals
+                const workerId = gameState.mineralWorkers.pop();
+                scv = gameState.units.find(u => u.id === workerId);
+            }
+
+            if (!scv) {
+                result.message = 'No SCVs available for construction';
+                return result;
+            }
+
+            // Clear previous orders
+            scv.targetResource = null;
+            scv.targetX = undefined;
+            scv.targetZ = undefined;
+
+            // Spend resources
+            gameState.spendResources(buildingConfig.cost);
+
+            // Create building (under construction)
+            const building = gameState.addBuilding({
+                type: buildingType,
+                name: buildingConfig.name,
+                x: placement.x,
+                z: placement.z,
+                health: 10,
+                maxHealth: 100,
+                isComplete: false
+            });
+
+            // Add to production queue (initially paused)
+            gameState.addToProductionQueue({
+                category: 'building',
+                buildingId: building.id,
+                type: buildingType,
+                name: buildingConfig.name,
+                buildTime: buildingConfig.buildTime,
+                supplyProvided: buildingConfig.supplyProvided || 0,
+                isPaused: true
+            });
+
+            // Assign SCV
+            scv.state = 'constructing';
+            scv.targetBuildingId = building.id;
+            scv.targetX = placement.x;
+            scv.targetZ = placement.z;
+
+            // Callback for renderer
+            if (this.onBuildingCreated) {
+                this.onBuildingCreated(building);
+            }
+
+            result.success = true;
+            result.message = `SCV assigned to build ${buildingConfig.name}`;
+            return result;
+        }
+
+        // Special Zerg logic: drones are consumed
+        if (faction.id === 'zerg') {
+            // Find a drone
+            let drone = gameState.getIdleWorkers()[0];
+            if (!drone && gameState.mineralWorkers.length > 0) {
+                // Take one from minerals
+                const workerId = gameState.mineralWorkers.pop();
+                drone = gameState.units.find(u => u.id === workerId);
+            }
+
+            if (!drone) {
+                result.message = 'No drones available for construction';
+                return result;
+            }
+
+            // Clear previous orders
+            drone.targetResource = null;
+            drone.targetX = undefined;
+            drone.targetZ = undefined;
+
+            // Spend resources
+            gameState.spendResources(buildingConfig.cost);
+
+            // Assign drone to construction
+            drone.state = 'constructing';
+            drone.constructionData = {
+                type: buildingType,
+                name: buildingConfig.name,
+                x: placement.x,
+                z: placement.z,
+                buildTime: buildingConfig.buildTime,
+                supplyProvided: buildingConfig.supplyProvided || 0
+            };
+
+            result.success = true;
+            result.message = `Drone moving to morph into ${buildingConfig.name}`;
+            return result;
+        }
+
         // Spend resources
         gameState.spendResources(buildingConfig.cost);
 
@@ -179,7 +279,33 @@ export class GameActions {
         return result;
     }
 
-    produceUnit(unitType) {
+    startZergConstruction(constructionData) {
+        // This is called when the drone reaches the construction site
+        const building = gameState.addBuilding({
+            type: constructionData.type,
+            name: constructionData.name,
+            x: constructionData.x,
+            z: constructionData.z,
+            health: 100,
+            maxHealth: 100,
+            isComplete: false
+        });
+
+        gameState.addToProductionQueue({
+            category: 'building',
+            buildingId: building.id,
+            type: constructionData.type,
+            name: constructionData.name,
+            buildTime: constructionData.buildTime,
+            supplyProvided: constructionData.supplyProvided || 0
+        });
+
+        if (this.onBuildingCreated) {
+            this.onBuildingCreated(building);
+        }
+    }
+
+    trainUnit(buildingType, unitType) {
         const result = { success: false, message: '' };
         const faction = gameState.faction;
 
@@ -188,9 +314,31 @@ export class GameActions {
             return result;
         }
 
-        let unitConfig;
+        // Special case for Overlords (Zerg supply)
+        if (unitType === 'overlord' && faction.id === 'zerg') {
+            const overlordConfig = faction.supplyUnit;
+            if (!gameState.canAfford(overlordConfig.cost)) {
+                result.message = `Not enough resources. Need ${overlordConfig.cost.minerals} minerals`;
+                return result;
+            }
+            gameState.spendResources(overlordConfig.cost);
+            gameState.addToProductionQueue({
+                category: 'unit',
+                unitType: 'overlord',
+                name: overlordConfig.name,
+                buildTime: overlordConfig.buildTime,
+                population: 0,
+                health: 200,
+                isSupplyUnit: true,
+                supplyProvided: overlordConfig.supplyProvided
+            });
+            result.success = true;
+            result.message = `Spawning ${overlordConfig.name}`;
+            return result;
+        }
 
-        // Normalize unit type aliases
+        let unitConfig;
+        // Normalize unit type
         const unitTypeMap = {
             'worker': 'worker',
             'scv': 'worker',
@@ -213,22 +361,17 @@ export class GameActions {
 
         const populationCost = unitConfig.population || 1;
 
-        // Check population
         if (!gameState.canAddPopulation(populationCost)) {
             result.message = 'Population cap reached. Build more supply structures.';
             return result;
         }
 
-        // Check resources
         if (!gameState.canAfford(unitConfig.cost)) {
             result.message = `Not enough resources. Need ${unitConfig.cost.minerals} minerals, ${unitConfig.cost.gas} gas`;
             return result;
         }
 
-        // Spend resources
         gameState.spendResources(unitConfig.cost);
-
-        // Add to production queue
         gameState.addToProductionQueue({
             category: 'unit',
             unitType: normalizedType,
@@ -240,37 +383,6 @@ export class GameActions {
 
         result.success = true;
         result.message = `Training ${unitConfig.name}`;
-        return result;
-    }
-
-    produceOverlord() {
-        const result = { success: false, message: '' };
-        const faction = gameState.faction;
-        const overlordConfig = faction.supplyUnit;
-
-        // Check resources
-        if (!gameState.canAfford(overlordConfig.cost)) {
-            result.message = `Not enough resources. Need ${overlordConfig.cost.minerals} minerals`;
-            return result;
-        }
-
-        // Spend resources
-        gameState.spendResources(overlordConfig.cost);
-
-        // Add to production queue as a special supply unit
-        gameState.addToProductionQueue({
-            category: 'unit',
-            unitType: 'overlord',
-            name: overlordConfig.name,
-            buildTime: overlordConfig.buildTime,
-            population: 0, // Overlords don't cost supply
-            health: 200,
-            isSupplyUnit: true,
-            supplyProvided: overlordConfig.supplyProvided
-        });
-
-        result.success = true;
-        result.message = `Spawning ${overlordConfig.name}`;
         return result;
     }
 

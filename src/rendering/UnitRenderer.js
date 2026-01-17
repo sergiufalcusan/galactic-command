@@ -68,7 +68,7 @@ export class UnitRenderer {
             model.scale.setScalar(MODEL_SCALES.worker);
             modelLoader.applyFactionColor(model, this.colors.primary);
 
-            // Center the model within the group
+            // Center the model within the group to align with ring and hitbox
             const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
             model.position.x -= center.x;
@@ -79,6 +79,18 @@ export class UnitRenderer {
             console.error('[UnitRenderer] Failed to load worker model, using fallback');
             group.add(this.createFallbackWorker());
         }
+
+        // Add invisible selection hitbox (larger than model to make selection easier)
+        const hitboxGeometry = new THREE.CylinderGeometry(1.2, 1.2, 2.5, 8);
+        const hitboxMaterial = new THREE.MeshBasicMaterial({
+            visible: false,
+            transparent: true,
+            opacity: 0
+        });
+        const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
+        hitbox.position.y = 1.25;
+        hitbox.userData.unitData = unitData; // Essential for selection
+        group.add(hitbox);
 
         // Add selection ring (hidden by default)
         const selectionRing = this.createSelectionRing();
@@ -126,7 +138,7 @@ export class UnitRenderer {
             model.scale.setScalar(scale);
             modelLoader.applyFactionColor(model, this.colors.primary);
 
-            // Center the model within the group
+            // Center the model within the group to align with ring and hitbox
             const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
             model.position.x -= center.x;
@@ -137,6 +149,18 @@ export class UnitRenderer {
             console.error('[UnitRenderer] Failed to load combat model, using fallback');
             group.add(this.createFallbackCombatUnit());
         }
+
+        // Add invisible selection hitbox
+        const hitboxGeometry = new THREE.CylinderGeometry(1.5, 1.5, 3, 8);
+        const hitboxMaterial = new THREE.MeshBasicMaterial({
+            visible: false,
+            transparent: true,
+            opacity: 0
+        });
+        const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
+        hitbox.position.y = 1.5;
+        hitbox.userData.unitData = unitData;
+        group.add(hitbox);
 
         // Selection ring
         const selectionRing = this.createSelectionRing();

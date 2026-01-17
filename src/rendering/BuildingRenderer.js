@@ -53,8 +53,8 @@ export class BuildingRenderer {
         group.userData.buildingData = buildingData;
 
         // Add invisible hitbox for click detection (covers entire building)
-        const hitboxSize = buildingData.type === 'base' ? 6 : 4;
-        const hitboxHeight = buildingData.type === 'base' ? 4 : 3;
+        const hitboxSize = buildingData.type === 'base' ? 8 : 6;
+        const hitboxHeight = buildingData.type === 'base' ? 6 : 4;
         const hitboxGeometry = new THREE.BoxGeometry(hitboxSize, hitboxHeight, hitboxSize);
         const hitboxMaterial = new THREE.MeshBasicMaterial({
             visible: false // Invisible but still raycastable
@@ -180,6 +180,7 @@ export class BuildingRenderer {
         });
         const wire = new THREE.Mesh(wireGeometry, wireMaterial);
         wire.position.y = 2;
+        wire.userData.isWireframe = true;
         group.add(wire);
 
         // Progress bar background (Floating above building)
@@ -236,16 +237,22 @@ export class BuildingRenderer {
         return group;
     }
 
-    updateConstructionProgress(buildingId, progress, remainingTime) {
+    updateConstructionProgress(buildingId, progress, remainingTime, isPaused = false) {
         const building = this.buildings.get(buildingId);
         if (building && building.userData.constructionOverlay) {
             const overlay = building.userData.constructionOverlay;
 
             overlay.children.forEach(child => {
+                // Update wireframe color (Green if active, Yellow if paused)
+                if (child.userData?.isWireframe) {
+                    child.material.color.set(isPaused ? 0xffcc00 : 0x00ff00);
+                }
+
                 // Update progress bar
                 if (child.userData?.isProgressBar) {
                     child.scale.x = Math.max(0.01, progress);
                     child.position.x = -1.95 + (progress * 1.95);
+                    child.material.color.set(isPaused ? 0xffcc00 : 0x00ff00);
                 }
 
                 // Update timer text
@@ -253,15 +260,22 @@ export class BuildingRenderer {
                     const canvas = child.userData.canvas;
                     const ctx = canvas.getContext('2d');
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.fillStyle = '#00ff00';
-                    ctx.font = 'bold 32px monospace';
                     ctx.textAlign = 'center';
 
-                    const seconds = Math.ceil(remainingTime);
-                    const mins = Math.floor(seconds / 60);
-                    const secs = seconds % 60;
-                    const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
-                    ctx.fillText(timeStr, 64, 40);
+                    // No text status, just timer if not paused
+                    if (!isPaused) {
+                        ctx.fillStyle = '#00ff00';
+                        ctx.font = 'bold 32px monospace';
+
+                        const seconds = Math.ceil(remainingTime);
+                        const mins = Math.floor(seconds / 60);
+                        const secs = seconds % 60;
+                        const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+                        ctx.fillText(timeStr, 64, 40);
+                    } else {
+                        // Paused - show nothing or maybe a small pause icon?
+                        // User said "don't show any text above"
+                    }
 
                     child.userData.texture.needsUpdate = true;
                 }

@@ -88,7 +88,8 @@ export class GameScene {
         this.scene.add(gridHelper);
 
         // Resize handler
-        window.addEventListener('resize', () => this.onResize());
+        this.onResizeHandler = () => this.onResize();
+        window.addEventListener('resize', this.onResizeHandler);
     }
 
     setupLighting() {
@@ -202,6 +203,10 @@ export class GameScene {
     }
 
     dispose() {
+        window.removeEventListener('keydown', this.onKeyDown);
+        window.removeEventListener('keyup', this.onKeyUp);
+        window.removeEventListener('resize', this.onResizeHandler);
+
         this.controls.dispose();
         this.renderer.dispose();
 
@@ -209,7 +214,9 @@ export class GameScene {
             this.removeObject(id);
         });
 
-        this.container.removeChild(this.renderer.domElement);
+        if (this.container && this.renderer.domElement) {
+            this.container.removeChild(this.renderer.domElement);
+        }
     }
 
     // Camera movement helpers

@@ -193,6 +193,11 @@ class GameState {
         const index = this.units.findIndex(u => u.id === unitId);
         if (index > -1) {
             const unit = this.units.splice(index, 1)[0];
+
+            // Clean up from worker assignments
+            this.mineralWorkers = this.mineralWorkers.filter(id => id !== unitId);
+            this.gasWorkers = this.gasWorkers.filter(id => id !== unitId);
+
             this.population -= 1;
             this.emit('unitRemoved', unit);
             return unit;
@@ -345,7 +350,10 @@ class GameState {
         const completed = [];
 
         this.productionQueue.forEach(item => {
-            item.progress += deltaTime;
+            if (item.isPaused) return;
+
+            const speedMultiplier = item.speedMultiplier || 1.0;
+            item.progress += deltaTime * speedMultiplier;
 
             // Use small tolerance to avoid floating point issues
             if (item.progress >= item.buildTime - 0.01) {
@@ -413,6 +421,16 @@ class GameState {
                     if (geyser) {
                         geyser.hasExtractor = true;
                     }
+                }
+
+                // If Human, find ALL SCVs that were building this and make them idle
+                if (this.faction.id === 'human') {
+                    this.units.forEach(u => {
+                        if (u.type === 'worker' && u.state === 'constructing' && u.targetBuildingId === item.buildingId) {
+                            u.state = 'idle';
+                            u.targetBuildingId = null;
+                        }
+                    });
                 }
             }
         }
