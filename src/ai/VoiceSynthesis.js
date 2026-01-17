@@ -23,19 +23,22 @@ const VOICE_SETTINGS = {
         stability: 0.3, // More variation for alien feel
         similarity_boost: 0.7,
         style: 0.5,
-        use_speaker_boost: true
+        use_speaker_boost: true,
+        playbackRate: 1.2 // Faster for aggressive swarm feel
     },
     human: {
         stability: 0.75, // More stable for military precision
         similarity_boost: 0.75,
         style: 0.3,
-        use_speaker_boost: true
+        use_speaker_boost: true,
+        playbackRate: 1.0
     },
     protoss: {
         stability: 0.5, // Balanced for wisdom
         similarity_boost: 0.8,
         style: 0.7,
-        use_speaker_boost: true
+        use_speaker_boost: true,
+        playbackRate: 0.95 // Slightly slower for deliberate wisdom
     }
 };
 
@@ -156,6 +159,11 @@ export class VoiceSynthesis {
             const blob = new Blob([audioData], { type: 'audio/mpeg' });
             const url = URL.createObjectURL(blob);
             const audio = new Audio(url);
+
+            // Apply custom playback rate if defined
+            if (this.settings && this.settings.playbackRate) {
+                audio.playbackRate = this.settings.playbackRate;
+            }
 
             this.currentAudio = audio;
 
