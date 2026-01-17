@@ -139,6 +139,16 @@ export class GameActions {
                 return result;
         }
 
+        // Check for building overlap (skip for gas extractors - they go on geysers)
+        if (normalizedType !== 'gasextractor' && normalizedType !== 'extractor' &&
+            normalizedType !== 'refinery' && normalizedType !== 'assimilator') {
+            const validationResult = this.isBuildingPositionValid(placement.x, placement.z, buildingType);
+            if (!validationResult.valid) {
+                result.message = validationResult.reason;
+                return result;
+            }
+        }
+
         // Check resources
         if (!gameState.canAfford(buildingConfig.cost)) {
             result.message = `Not enough resources. Need ${buildingConfig.cost.minerals} minerals, ${buildingConfig.cost.gas} gas`;
@@ -496,6 +506,62 @@ export class GameActions {
             ? `Assigned ${assigned} workers to harvest gas`
             : 'Gas workers slots are full (max 3)';
         return result;
+    }
+
+    // Check if a building position is valid (not overlapping with other buildings)
+    isBuildingPositionValid(x, z, buildingType) {
+        // Building sizes (radius from center)
+        const buildingSizes = {
+            'supply': 2,
+            'supplydepot': 2,
+            'pylon': 2,
+            'barracks': 3,
+            'spawningpool': 3,
+            'gateway': 3,
+            'factory': 3.5,
+            'roachwarren': 3.5,
+            'roboticsfacility': 3.5,
+            'base': 6
+        };
+
+        const normalizedType = buildingType.toLowerCase();
+        const newBuildingSize = buildingSizes[normalizedType] || 3;
+        const minDistance = 6; // Minimum distance between building centers
+
+        // Check against all existing buildings
+        for (const building of gameState.buildings) {
+            const existingSize = buildingSizes[building.type?.toLowerCase()] || 3;
+            const requiredDistance = Math.max(minDistance, newBuildingSize + existingSize);
+
+            const dx = building.x - x;
+            const dz = building.z - z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+
+            if (distance < requiredDistance) {
+                return { valid: false, reason: 'Too close to another building' };
+            }
+        }
+
+        // Also check against resource nodes (minerals and gas)
+        for (const patch of gameState.mineralPatches) {
+            const dx = patch.x - x;
+            const dz = patch.z - z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+            if (distance < 5) {
+                return { valid: false, reason: 'Too close to mineral patch' };
+            }
+        }
+
+        for (const geyser of gameState.gasGeysers) {
+            const dx = geyser.x - x;
+            const dz = geyser.z - z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+            if (distance < 4) {
+                return { valid: false, reason: 'Cannot build on a gas geyser - only gas extractors allowed' };
+            }
+        }
+
+        return { valid: true };
     }
 }
 

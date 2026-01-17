@@ -81,13 +81,24 @@ class Game {
         if (!this.isRunning) return;
 
         // ESC - show menu or cancel building placement
+        // ESC - show menu or cancel building placement
         if (e.key === 'Escape') {
+            // Priority 1: Cancel active building placement (ghost building)
             if (this.inputHandler?.buildingPlacementMode) {
                 this.inputHandler.cancelBuildingPlacement();
+                // Also ensure UI is hidden if we were just placing
                 this.buildingPlacementUI?.hide();
-            } else {
-                this.hud?.showInGameMenu();
+                return;
             }
+
+            // Priority 2: Close building selection UI if open
+            if (this.buildingPlacementUI?.isVisible) {
+                this.buildingPlacementUI.hide();
+                return;
+            }
+
+            // Priority 3: Toggle In-Game Menu
+            this.hud?.toggleInGameMenu();
             return;
         }
 
@@ -295,6 +306,11 @@ class Game {
                     }
                 }
             }
+        });
+
+        // Handle gas extractor completion - update geyser visuals
+        gameState.on('geyserExtractorBuilt', ({ geyser }) => {
+            this.terrainRenderer?.updateResourceNode(geyser.id, geyser);
         });
     }
 
@@ -528,6 +544,13 @@ class Game {
 
         // Update HUD
         this.hud?.update();
+
+        // Update gas geyser visuals (haze fades as gas depletes)
+        gameState.gasGeysers.forEach(geyser => {
+            if (geyser.hasExtractor) {
+                this.terrainRenderer?.updateResourceNode(geyser.id, geyser);
+            }
+        });
 
         // Check Human SCV proximity for construction
         this.checkHumanConstruction();

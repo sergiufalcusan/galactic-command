@@ -116,7 +116,14 @@ export class TerrainRenderer {
         group.position.set(data.x, 0.5, data.z);
 
         // Load geyser model
-        this.loadResourceModel(group, '/models/geyser.glb', 2.0, 0x3a3a3a);
+        this.loadResourceModel(group, '/models/geyser.glb', 2.0, 0x3a3a3a).then(() => {
+            // Tag the loaded model for visibility control
+            group.children.forEach(child => {
+                if (!child.userData.isPlume && !child.userData.isGasGlow && !child.userData.isExtractionHaze) {
+                    child.userData.isGeyserModel = true;
+                }
+            });
+        });
 
         // Inner glow (gas)
         const gasGeometry = new THREE.CylinderGeometry(1.5, 1.8, 0.8, 16);
@@ -127,6 +134,7 @@ export class TerrainRenderer {
         });
         const gasGlow = new THREE.Mesh(gasGeometry, gasMaterial);
         gasGlow.position.y = 0.6;
+        gasGlow.userData.isGasGlow = true;
         group.add(gasGlow);
 
         // Simple gas plume
@@ -140,6 +148,20 @@ export class TerrainRenderer {
         plume.position.y = 2.5;
         plume.userData.isPlume = true;
         group.add(plume);
+
+        // Extraction haze (shown when extractor is built)
+        const hazeGeometry = new THREE.CylinderGeometry(2.5, 2.5, 4, 16, 1, true);
+        const hazeMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ff88,
+            transparent: true,
+            opacity: 0.0, // Start invisible
+            side: THREE.DoubleSide
+        });
+        const haze = new THREE.Mesh(hazeGeometry, hazeMaterial);
+        haze.position.y = 3;
+        haze.userData.isExtractionHaze = true;
+        haze.visible = false; // Hidden until extractor is built
+        group.add(haze);
 
         this.scene.addObject(data.id, group);
         this.resourceNodes.set(data.id, { group, type: 'gas', data });
@@ -158,9 +180,12 @@ export class TerrainRenderer {
                 modelLoader.applyFactionColor(model, 0x00d4ff);
             }
 
-            // Center the model within the group so circles align properly
+            // Center the model's bounding box on X/Z to align with the base circle
             const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
+
+            // Offset model position to subtract the center offset (centering it)
+            // We keep Y relative to the pivot if needed, or we could center it too but resources usually sit on ground
             model.position.x -= center.x;
             model.position.z -= center.z;
 
@@ -182,6 +207,20 @@ export class TerrainRenderer {
                     child.material.emissiveIntensity = 0.5 * percent;
                 }
             });
+        } else if (node.type === 'gas') {
+            // Hide geyser model when extractor is built
+            node.group.children.forEach(child => {
+                if (child.userData.isPlume || child.userData.isGasGlow || child.userData.isGeyserModel) {
+                    child.visible = !data.hasExtractor;
+                }
+                // Show/update extraction haze when extractor is built
+                if (child.userData.isExtractionHaze) {
+                    child.visible = data.hasExtractor && data.amount > 0;
+                    if (child.material) {
+                        child.material.opacity = 0.4 * percent; // Fade as gas depletes
+                    }
+                }
+            });
         }
     }
 
@@ -189,11 +228,16 @@ export class TerrainRenderer {
         this.resourceNodes.forEach((node, id) => {
             // Minerals stay still - no rotation
             if (node.type === 'gas') {
-                // Animate gas plume only
                 node.group.children.forEach(child => {
-                    if (child.userData.isPlume) {
+                    // Animate gas plume (only if visible - no extractor)
+                    if (child.userData.isPlume && child.visible) {
                         child.scale.y = 1 + Math.sin(time * 3) * 0.2;
                         child.material.opacity = 0.2 + Math.sin(time * 4) * 0.1;
+                    }
+                    // Animate extraction haze (swirling effect)
+                    if (child.userData.isExtractionHaze && child.visible) {
+                        child.rotation.y = time * 0.5;
+                        child.scale.y = 1 + Math.sin(time * 2) * 0.15;
                     }
                 });
             }

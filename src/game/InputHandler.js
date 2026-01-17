@@ -210,7 +210,7 @@ export class InputHandler {
     }
 
     findNearbyResource(x, z) {
-        const proximityRadius = 5; // Distance to consider "near" a resource
+        const proximityRadius = 2.0; // Reduced to match visual glow radius exactly
 
         // Check mineral patches
         for (const patch of gameState.mineralPatches) {

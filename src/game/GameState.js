@@ -610,6 +610,7 @@ class GameState {
                     );
                     if (geyser) {
                         geyser.hasExtractor = true;
+                        this.emit('geyserExtractorBuilt', { geyser });
                     }
                 }
 

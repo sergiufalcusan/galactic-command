@@ -190,12 +190,20 @@ RULES:
 
     getGameContext() {
         const state = gameState.getState();
+        const idleWorkers = gameState.getIdleWorkers().length;
+        const mineralWorkers = gameState.mineralWorkers.length;
+        const gasWorkers = gameState.gasWorkers.length;
+        const totalWorkers = gameState.getUnitsByType('worker').length;
+
         return `
 Current game state:
 - Minerals: ${state.minerals}
 - Vespene Gas: ${state.gas}
 - Population: ${state.population}/${state.populationMax} (max 200)
-- Workers: ${gameState.getUnitsByType('worker').length} (${gameState.getIdleWorkers().length} idle)
+- Workers: ${totalWorkers} total
+  - Mining minerals: ${mineralWorkers}
+  - Harvesting gas: ${gasWorkers}
+  - Idle: ${idleWorkers}
 - Buildings: ${state.buildings.map(b => b.name).join(', ') || 'None'}
 - Game time: ${state.gameTime}
 - Gas extractors built: ${gameState.gasGeysers.filter(g => g.hasExtractor).length}/2`;
@@ -373,6 +381,58 @@ Current game state:
 
     getGreeting() {
         return getRandomGreeting(this.faction);
+    }
+
+    // Generate a dynamic greeting using the AI API
+    async generateDynamicGreeting() {
+        if (!this.apiKey) {
+            const greeting = this.getGreeting();
+            this.voice.speak(greeting);
+            return greeting;
+        }
+
+        this.isProcessing = true;
+        try {
+            const greetingPrompt = `The game has just started. Greet the player as your character would - welcome them, maybe make a joke about what's ahead, and get them excited to play. Keep it SHORT (2-3 sentences max). Be creative and funny! Don't use action commands.`;
+
+            const messages = [
+                { role: 'system', content: this.systemPrompt },
+                { role: 'user', content: greetingPrompt }
+            ];
+
+            const headers = { 'Content-Type': 'application/json' };
+            if (!API_BASE_URL && this.apiKey) {
+                headers['Authorization'] = `Bearer ${this.apiKey}`;
+            }
+
+            const response = await fetch(OPENAI_API_URL, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: messages,
+                    max_tokens: 100,
+                    temperature: 0.9
+                })
+            });
+
+            this.isProcessing = false;
+
+            if (response.ok) {
+                const data = await response.json();
+                const greeting = this.cleanResponseText(data.choices[0].message.content);
+                this.voice.speak(greeting);
+                return greeting;
+            }
+        } catch (error) {
+            console.error('AI greeting error:', error);
+            this.isProcessing = false;
+        }
+
+        // Fallback to static greeting
+        const greeting = this.getGreeting();
+        this.voice.speak(greeting);
+        return greeting;
     }
 
     // Reset conversation for new game

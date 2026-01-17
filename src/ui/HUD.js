@@ -284,9 +284,11 @@ export class HUD {
     }
 
     showInGameMenu() {
-        const modal = document.createElement('div');
-        modal.className = 'ingame-menu-modal';
-        modal.innerHTML = `
+        if (this.menuModal) return; // Menu already open
+
+        this.menuModal = document.createElement('div');
+        this.menuModal.className = 'ingame-menu-modal';
+        this.menuModal.innerHTML = `
       <div class="ingame-menu-content">
         <h3>Game Menu</h3>
         <button id="ingame-resume" class="menu-btn primary">Resume</button>
@@ -333,30 +335,49 @@ export class HUD {
             document.head.appendChild(style);
         }
 
-        document.body.appendChild(modal);
+        document.body.appendChild(this.menuModal);
 
-        modal.querySelector('#ingame-resume').addEventListener('click', () => {
-            modal.remove();
+        this.menuModal.querySelector('#ingame-resume').addEventListener('click', () => {
+            this.closeInGameMenu();
         });
 
-        modal.querySelector('#ingame-save').addEventListener('click', () => {
+        this.menuModal.querySelector('#ingame-save').addEventListener('click', () => {
             if (gameState.save()) {
                 this.showNotification('Game Saved!');
             }
-            modal.remove();
+            this.closeInGameMenu();
         });
 
-        modal.querySelector('#ingame-quit').addEventListener('click', () => {
-            modal.remove();
+        this.menuModal.querySelector('#ingame-quit').addEventListener('click', () => {
+            this.closeInGameMenu();
             // Dispatch custom event for main.js to handle
             window.dispatchEvent(new CustomEvent('quitToMenu'));
         });
 
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
+        this.menuModal.addEventListener('click', (e) => {
+            if (e.target === this.menuModal) {
+                this.closeInGameMenu();
             }
         });
+    }
+
+    closeInGameMenu() {
+        if (this.menuModal) {
+            this.menuModal.remove();
+            this.menuModal = null;
+        }
+    }
+
+    toggleInGameMenu() {
+        if (this.menuModal) {
+            this.closeInGameMenu();
+        } else {
+            this.showInGameMenu();
+        }
+    }
+
+    isMenuOpen() {
+        return !!this.menuModal;
     }
 }
 

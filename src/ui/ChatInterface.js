@@ -49,8 +49,9 @@ export class ChatInterface {
 
         // Add initial greeting
         if (this.agent) {
-            setTimeout(() => {
-                const greeting = this.agent.getGreeting();
+            setTimeout(async () => {
+                // Use dynamic AI greeting if available
+                const greeting = await this.agent.generateDynamicGreeting();
                 this.addMessage(greeting, 'ai');
             }, 500);
         }
