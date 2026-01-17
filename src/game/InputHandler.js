@@ -245,6 +245,9 @@ export class InputHandler {
 
     onMouseDown(event) {
         if (event.button === 0 && event.target === this.scene.renderer.domElement) {
+            // Prevent box selection if Shift is held (used for navigation)
+            if (event.shiftKey) return;
+
             // Start box selection on left mouse down
             this.isBoxSelecting = true;
             this.boxSelectStart = { x: event.clientX, y: event.clientY };

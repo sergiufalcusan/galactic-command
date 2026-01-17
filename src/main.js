@@ -155,7 +155,8 @@ class Game {
             if (result.success) {
                 this.hud?.showNotification(result.message);
                 // Notify AI of player's action for feedback
-                this.notifyAIWithChat('build', { type, buildingName: result.message });
+                // Pass the type directly instead of the message to avoid AI confusion
+                this.notifyAIWithChat('build', { type, buildingName: type });
             } else {
                 this.hud?.showNotification(result.message, 'error');
             }

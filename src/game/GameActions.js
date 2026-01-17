@@ -59,9 +59,21 @@ export class GameActions {
                 buildingConfig = faction.buildings.supply || faction.supplyUnit;
                 // Auto-place supply buildings in a grid pattern
                 if (useAutoPlacement) {
-                    const supplyCount = gameState.getBuildingsByType('supply').length;
-                    placement.x = 15 + (supplyCount % 3) * 4;
-                    placement.z = -10 + Math.floor(supplyCount / 3) * 4;
+                    const supplyTypes = ['supply', 'supplydepot', 'pylon'];
+                    const existingCount = gameState.buildings.filter(b => supplyTypes.includes(b.type.toLowerCase())).length;
+
+                    // Find first valid grid position
+                    let offset = 0;
+                    while (true) {
+                        const idx = existingCount + offset;
+                        placement.x = 15 + (idx % 3) * 4;
+                        placement.z = -10 + Math.floor(idx / 3) * 4;
+                        const validation = this.isBuildingPositionValid(placement.x, placement.z, buildingType);
+                        if (validation.valid) break;
+
+                        offset++;
+                        if (offset > 50) break; // Prevent infinite loop
+                    }
                 }
                 break;
 
@@ -70,9 +82,20 @@ export class GameActions {
             case 'gateway':
                 buildingConfig = faction.buildings.barracks;
                 if (useAutoPlacement) {
-                    const barracksCount = gameState.getBuildingsByType('barracks').length;
-                    placement.x = -15 - barracksCount * 5;
-                    placement.z = 5;
+                    const barracksTypes = ['barracks', 'spawningpool', 'gateway'];
+                    const existingCount = gameState.buildings.filter(b => barracksTypes.includes(b.type.toLowerCase())).length;
+
+                    // Find first valid position
+                    let offset = 0;
+                    while (true) {
+                        const count = existingCount + offset;
+                        placement.x = -15 - count * 5;
+                        placement.z = 5;
+                        const validation = this.isBuildingPositionValid(placement.x, placement.z, buildingType);
+                        if (validation.valid) break;
+                        offset++;
+                        if (offset > 20) break;
+                    }
                 }
                 break;
 
@@ -81,9 +104,20 @@ export class GameActions {
             case 'roboticsfacility':
                 buildingConfig = faction.buildings.factory;
                 if (useAutoPlacement) {
-                    const factoryCount = gameState.getBuildingsByType('factory').length;
-                    placement.x = -15 - factoryCount * 5;
-                    placement.z = -5;
+                    const factoryTypes = ['factory', 'roachwarren', 'roboticsfacility'];
+                    const existingCount = gameState.buildings.filter(b => factoryTypes.includes(b.type.toLowerCase())).length;
+
+                    // Find first valid position
+                    let offset = 0;
+                    while (true) {
+                        const count = existingCount + offset;
+                        placement.x = -15 - count * 5;
+                        placement.z = -5;
+                        const validation = this.isBuildingPositionValid(placement.x, placement.z, buildingType);
+                        if (validation.valid) break;
+                        offset++;
+                        if (offset > 20) break;
+                    }
                 }
                 break;
 

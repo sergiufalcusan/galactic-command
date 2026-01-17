@@ -27,6 +27,9 @@ export class AIAgent {
 
         // System prompt for the AI
         this.systemPrompt = this.buildSystemPrompt();
+
+        // Track previous game state for context awareness
+        this.lastState = null;
     }
 
     buildSystemPrompt() {
@@ -204,9 +207,33 @@ Current game state:
   - Mining minerals: ${mineralWorkers}
   - Harvesting gas: ${gasWorkers}
   - Idle: ${idleWorkers}
-- Buildings: ${state.buildings.map(b => b.name).join(', ') || 'None'}
+- Buildings: ${this.getBuildingCounts()}
 - Game time: ${state.gameTime}
 - Gas extractors built: ${gameState.gasGeysers.filter(g => g.hasExtractor).length}/2`;
+    }
+
+    getBuildingCounts() {
+        const buildings = gameState.buildings;
+        const counts = {};
+
+        buildings.forEach(b => {
+            const name = b.name || b.type;
+            if (!counts[name]) counts[name] = { total: 0, completed: 0 };
+            counts[name].total++;
+            if (b.isComplete) counts[name].completed++;
+        });
+
+        if (Object.keys(counts).length === 0) return 'None';
+
+        return Object.entries(counts)
+            .map(([name, data]) => {
+                if (data.total === data.completed) {
+                    return `${data.total} ${name}${data.total > 1 ? 's' : ''}`;
+                } else {
+                    return `${data.completed} ${name}${data.completed !== 1 ? 's' : ''} (+${data.total - data.completed} building)`;
+                }
+            })
+            .join(', ');
     }
 
     getUnitCounts() {
@@ -385,7 +412,8 @@ Current game state:
 
     // Generate a dynamic greeting using the AI API
     async generateDynamicGreeting() {
-        if (!this.apiKey) {
+        // Proceed if we have an API key OR if we are using a backend proxy (API_BASE_URL)
+        if (!this.apiKey && !API_BASE_URL) {
             const greeting = this.getGreeting();
             this.voice.speak(greeting);
             return greeting;
@@ -455,66 +483,105 @@ Current game state:
 
         const actionDescription = actionDescriptions[actionType] || `The player performed: ${actionType}`;
 
-        // Use API to generate original responses if available
-        if (this.apiKey) {
-            this.isProcessing = true;
-            try {
-                // Get current game context for accurate responses
-                const gameContext = this.getGameContext();
+        this.isProcessing = true;
+        try {
+            const gameContext = this.getGameContext();
 
-                // Include specific unit counts for accuracy
-                const unitCounts = this.getUnitCounts();
-                const contextSummary = `Current army: ${unitCounts}`;
+            // Calculate state changes since last update
+            const currentState = {
+                minerals: gameState.mineralWorkers.length,
+                gas: gameState.gasWorkers.length,
+                idle: gameState.getIdleWorkers().length
+            };
 
-                const feedbackPrompt = `${actionDescription}.
+            let changesContext = '';
+            if (this.lastState) {
+                const minDiff = currentState.minerals - this.lastState.minerals;
+                const gasDiff = currentState.gas - this.lastState.gas;
+                const idleDiff = currentState.idle - this.lastState.idle;
+
+                const changes = [];
+                if (minDiff !== 0) changes.push(`Mineral workers: ${minDiff > 0 ? '+' : ''}${minDiff}`);
+                if (gasDiff !== 0) changes.push(`Gas workers: ${gasDiff > 0 ? '+' : ''}${gasDiff}`);
+                if (idleDiff !== 0) changes.push(`Idle workers: ${idleDiff > 0 ? '+' : ''}${idleDiff}`);
+
+                if (changes.length > 0) {
+                    changesContext = `\nRECENT CHANGES: ${changes.join(', ')}`;
+                }
+            }
+            // Update last state
+            this.lastState = currentState;
+
+            const unitCounts = this.getUnitCounts();
+            const contextSummary = `Current army: ${unitCounts}${changesContext}`;
+
+            const feedbackPrompt = `${actionDescription}.
 ${contextSummary}
 Give a SHORT (1 sentence max, under 15 words) reaction in character. Be creative and funny - NEVER repeat the same response twice. Be accurate about unit counts (e.g., if this is the FIRST marine, don't say "another"). Don't use action commands.`;
 
-                const messages = [
-                    { role: 'system', content: this.systemPrompt },
-                    { role: 'system', content: gameContext },
-                    { role: 'user', content: feedbackPrompt }
-                ];
+            const messages = [
+                { role: 'system', content: this.systemPrompt },
+                { role: 'system', content: gameContext },
+                { role: 'user', content: feedbackPrompt }
+            ];
 
-                const headers = { 'Content-Type': 'application/json' };
-                if (!API_BASE_URL && this.apiKey) {
-                    headers['Authorization'] = `Bearer ${this.apiKey}`;
-                }
-
-                const response = await fetch(OPENAI_API_URL, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({
-                        model: 'gpt-4o-mini',
-                        messages: messages,
-                        max_tokens: 60,
-                        temperature: 0.95 // Higher temperature for more variety
-                    })
-                });
-
-                this.isProcessing = false;
-
-                if (response.ok) {
-                    const data = await response.json();
-                    const aiResponse = this.cleanResponseText(data.choices[0].message.content);
-                    this.voice.speak(aiResponse);
-                    return { text: aiResponse, actions: [] };
-                }
-            } catch (error) {
-                console.error('AI feedback error:', error);
-                this.isProcessing = false;
+            const headers = { 'Content-Type': 'application/json' };
+            if (!API_BASE_URL && this.apiKey) {
+                headers['Authorization'] = `Bearer ${this.apiKey}`;
             }
-        }
 
-        // Fallback to static responses if API unavailable
-        const quickResponses = this.getQuickFeedback(actionType, details);
-        if (quickResponses) {
-            const response = quickResponses[Math.floor(Math.random() * quickResponses.length)];
-            this.voice.speak(response);
-            return { text: response, actions: [] };
-        }
+            // Only make API call if we have URL or Key
+            if (!API_BASE_URL && !this.apiKey) {
+                this.isProcessing = false;
+                // Fallback to static responses if API unavailable
+                const quickResponses = this.getQuickFeedback(actionType, details);
+                if (quickResponses) {
+                    const response = quickResponses[Math.floor(Math.random() * quickResponses.length)];
+                    this.voice.speak(response);
+                    return { text: response, actions: [] };
+                }
+                return { text: getRandomResponse(this.faction, 'acknowledge'), actions: [] };
+            }
 
-        return null;
+            const response = await fetch(OPENAI_API_URL, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: messages,
+                    max_tokens: 60,
+                    temperature: 0.8
+                })
+            });
+
+            this.isProcessing = false;
+
+            if (response.ok) {
+                const data = await response.json();
+                const responseText = this.cleanResponseText(data.choices[0].message.content);
+
+                // Speak the response
+                this.voice.speak(responseText);
+                return {
+                    text: responseText,
+                    actions: []
+                };
+            } else {
+                console.error('AI API error:', response.status, response.statusText);
+                return {
+                    text: getRandomResponse(this.faction, 'acknowledge'),
+                    actions: []
+                };
+            }
+
+        } catch (error) {
+            console.error('AI Agent error:', error);
+            this.isProcessing = false;
+            return {
+                text: getRandomResponse(this.faction, 'acknowledge') + ' There was a communication error.',
+                actions: []
+            };
+        }
     }
 
     getQuickFeedback(actionType, details) {
