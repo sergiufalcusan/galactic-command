@@ -375,8 +375,8 @@ export class TerrainRenderer {
             maxZ = Math.max(maxZ, s.z + s.radius);
         });
 
-        // Grid resolution
-        const cellSize = 1.5;
+        // Grid resolution - smaller = smoother edges
+        const cellSize = 0.8;
         const cols = Math.ceil((maxX - minX) / cellSize) + 1;
         const rows = Math.ceil((maxZ - minZ) / cellSize) + 1;
 
@@ -410,7 +410,7 @@ export class TerrainRenderer {
 
         if (vertices.length === 0) return null;
 
-        // Create triangles for cells where all 4 corners are inside creep
+        // Create triangles using marching squares for smooth edges
         const indices = [];
         for (let j = 0; j < rows; j++) {
             for (let i = 0; i < cols; i++) {
@@ -419,11 +419,27 @@ export class TerrainRenderer {
                 const v01 = vertexGrid[j + 1][i];
                 const v11 = vertexGrid[j + 1][i + 1];
 
-                // Only create triangles if all 4 corners exist
-                if (v00 >= 0 && v10 >= 0 && v01 >= 0 && v11 >= 0) {
+                // Count how many corners are inside
+                const corners = [v00 >= 0, v10 >= 0, v01 >= 0, v11 >= 0];
+                const insideCount = corners.filter(c => c).length;
+
+                if (insideCount === 4) {
+                    // Full quad - 2 triangles
                     indices.push(v00, v10, v11);
                     indices.push(v00, v11, v01);
+                } else if (insideCount === 3) {
+                    // Partial - 1 triangle (smooth edge)
+                    if (!corners[0]) { // v00 missing
+                        indices.push(v10, v11, v01);
+                    } else if (!corners[1]) { // v10 missing
+                        indices.push(v00, v11, v01);
+                    } else if (!corners[2]) { // v01 missing  
+                        indices.push(v00, v10, v11);
+                    } else { // v11 missing
+                        indices.push(v00, v10, v01);
+                    }
                 }
+                // Skip cells with 2 or fewer corners
             }
         }
 
