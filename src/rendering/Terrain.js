@@ -294,7 +294,18 @@ export class TerrainRenderer {
         }
     }
 
-    // Regenerate creep visuals - now using simple overlapping circles
+    // Get terrain height at any world position (matching the terrain generation formula)
+    getTerrainHeight(x, z) {
+        const distance = Math.sqrt(x * x + z * z);
+        const height = Math.sin(x * 0.1) * Math.cos(z * 0.1) * 0.5;
+
+        const flattenRadius = 15;
+        const flattenFactor = Math.max(0, 1 - distance / flattenRadius);
+
+        return height * (1 - flattenFactor);
+    }
+
+    // Regenerate creep visuals - terrain-conforming circles
     regenerateCreepMesh() {
         // Remove all existing creep meshes
         this.creepSources.forEach((source, id) => {
@@ -306,12 +317,10 @@ export class TerrainRenderer {
 
         if (!this.creepSources || this.creepSources.size === 0) return;
 
-        // Create a circle mesh for each source
+        // Create a terrain-conforming circle mesh for each source
         this.creepSources.forEach((source, id) => {
-            const geometry = new THREE.CircleGeometry(source.radius, 64);
+            const geometry = this.createTerrainConformingCircle(source.x, source.z, source.radius);
             const mesh = new THREE.Mesh(geometry, this.creepMaterial);
-            mesh.rotation.x = -Math.PI / 2;
-            mesh.position.set(source.x, 0.15, source.z);
             mesh.receiveShadow = true;
             mesh.userData.isCreep = true;
             mesh.userData.buildingId = id;
@@ -319,6 +328,67 @@ export class TerrainRenderer {
             this.scene.addObject(`creep_${id}`, mesh);
             source.mesh = mesh;
         });
+    }
+
+    // Create a subdivided circle that conforms to terrain height
+    createTerrainConformingCircle(centerX, centerZ, radius) {
+        // Create a subdivided disc (rings x segments)
+        const segments = 48;  // Angular segments
+        const rings = 12;     // Radial subdivisions
+
+        const vertices = [];
+        const indices = [];
+        const uvs = [];
+
+        // Create center vertex
+        const centerHeight = this.getTerrainHeight(centerX, centerZ) + 0.1;
+        vertices.push(centerX, centerHeight, centerZ);
+        uvs.push(0.5, 0.5);
+
+        // Create ring vertices
+        for (let r = 1; r <= rings; r++) {
+            const ringRadius = (r / rings) * radius;
+
+            for (let s = 0; s < segments; s++) {
+                const angle = (s / segments) * Math.PI * 2;
+                const x = centerX + Math.cos(angle) * ringRadius;
+                const z = centerZ + Math.sin(angle) * ringRadius;
+                const y = this.getTerrainHeight(x, z) + 0.1; // Small offset above terrain
+
+                vertices.push(x, y, z);
+                uvs.push(0.5 + Math.cos(angle) * 0.5 * (r / rings),
+                    0.5 + Math.sin(angle) * 0.5 * (r / rings));
+            }
+        }
+
+        // Create triangles for center ring (connecting to center vertex)
+        for (let s = 0; s < segments; s++) {
+            const next = (s + 1) % segments;
+            indices.push(0, 1 + s, 1 + next);
+        }
+
+        // Create triangles for outer rings
+        for (let r = 0; r < rings - 1; r++) {
+            const ringStart = 1 + r * segments;
+            const nextRingStart = 1 + (r + 1) * segments;
+
+            for (let s = 0; s < segments; s++) {
+                const next = (s + 1) % segments;
+
+                // Two triangles per quad
+                indices.push(ringStart + s, nextRingStart + s, nextRingStart + next);
+                indices.push(ringStart + s, nextRingStart + next, ringStart + next);
+            }
+        }
+
+        // Create BufferGeometry
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+
+        return geometry;
     }
 
     // Check if a position is on any creep source
