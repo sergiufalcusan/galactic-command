@@ -47,7 +47,14 @@ export const FACTIONS = {
                 cost: { minerals: 300, gas: 0 },
                 buildTime: 120,
                 supplyProvided: 10,
-                produces: ['drone', 'zergling', 'overlord']
+                produces: ['drone', 'overlord']
+            },
+            supply: {
+                name: 'Creep Colony',
+                cost: { minerals: 75, gas: 0 },
+                buildTime: 40,
+                supplyProvided: 8,
+                extendsCreep: true
             },
             gasExtractor: {
                 name: 'Extractor',

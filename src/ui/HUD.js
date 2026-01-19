@@ -157,8 +157,17 @@ export class HUD {
             trainableUnits.push({
                 key: 'worker',
                 data: faction.worker,
-                icon: '👷'
+                icon: this.getUnitIcon('worker')
             });
+
+            // Zerg can also train Overlords from Hatchery
+            if (faction.id === 'zerg' && faction.supplyUnit) {
+                trainableUnits.push({
+                    key: 'overlord',
+                    data: faction.supplyUnit,
+                    icon: '🎈'
+                });
+            }
         }
 
         // Barracks/Gateway/Spawning Pool can train basic combat units

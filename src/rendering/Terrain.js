@@ -6,10 +6,12 @@ import * as THREE from 'three';
 import { modelLoader } from './ModelLoader.js';
 
 export class TerrainRenderer {
-    constructor(scene) {
+    constructor(scene, faction = null) {
         this.scene = scene;
+        this.faction = faction;
         this.terrainMesh = null;
         this.resourceNodes = new Map();
+        this.creepPatches = new Map(); // Track creep terrain patches for Zerg
 
         // Preload resource models
         this.preloadResources();
@@ -59,6 +61,11 @@ export class TerrainRenderer {
     }
 
     addPlatforms() {
+        // Skip base platform for Zerg - they use creep instead
+        if (this.faction?.id === 'zerg') {
+            return;
+        }
+
         const platformGeometry = new THREE.CylinderGeometry(12, 14, 0.5, 32);
         const platformMaterial = new THREE.MeshStandardMaterial({
             color: 0x2a2a4e,
@@ -72,19 +79,6 @@ export class TerrainRenderer {
         basePlatform.position.y = 0.25;
         basePlatform.receiveShadow = true;
         this.scene.addObject('basePlatform', basePlatform);
-
-        const ringGeometry = new THREE.RingGeometry(13.5, 14.5, 64);
-        const ringMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00aaff,
-            transparent: true,
-            opacity: 0.5,
-            side: THREE.DoubleSide
-        });
-
-        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.51;
-        this.scene.addObject('platformRing', ring);
     }
 
     createMineralPatch(data) {
@@ -244,12 +238,141 @@ export class TerrainRenderer {
         });
     }
 
+    // ============== UNIFIED MERGED CREEP SYSTEM ==============
+    // Single merged mesh that combines all creep circles into one organic shape
+
+    static HATCHERY_CREEP_RADIUS = 40; // Doubled from 20
+    static CREEP_COLONY_RADIUS = 20;   // Doubled from 10 (half of Hatchery)
+
+    // Initialize creep system
+    initCreepSystem() {
+        this.creepSources = this.creepSources || new Map(); // {buildingId: {x, z, radius}}
+        this.creepMesh = this.creepMesh || null;
+
+        if (!this.creepMaterial) {
+            this.creepMaterial = new THREE.MeshStandardMaterial({
+                color: 0x5a1080,
+                roughness: 0.8,
+                metalness: 0.05,
+                transparent: true,
+                opacity: 0.95,
+                emissive: 0x330044,
+                emissiveIntensity: 0.35,
+                side: THREE.DoubleSide
+            });
+        }
+    }
+
+    // Add a creep source and regenerate the unified mesh
+    createCreep(buildingId, x, z, radius = 8, isBase = false) {
+        this.initCreepSystem();
+
+        // Determine radius based on building type
+        const creepRadius = isBase ?
+            TerrainRenderer.HATCHERY_CREEP_RADIUS :
+            TerrainRenderer.CREEP_COLONY_RADIUS;
+
+        // Store the creep source
+        this.creepSources.set(buildingId, { x, z, radius: creepRadius, isBase });
+
+        // Also store in creepPatches for isOnCreep checks
+        this.creepPatches.set(buildingId, { x, z, radius: creepRadius, isBase });
+
+        // Regenerate the unified mesh
+        this.regenerateCreepMesh();
+
+        console.log(`[Creep] Added ${isBase ? 'Hatchery' : 'Colony'} at (${x}, ${z}) radius ${creepRadius}`);
+    }
+
+    // Remove a creep source and regenerate
+    removeCreep(buildingId) {
+        if (this.creepSources?.has(buildingId)) {
+            this.creepSources.delete(buildingId);
+            this.creepPatches.delete(buildingId);
+            this.regenerateCreepMesh();
+            console.log(`[Creep] Removed creep for building ${buildingId}`);
+        }
+    }
+
+    // Regenerate creep visuals - now using simple overlapping circles
+    regenerateCreepMesh() {
+        // Remove all existing creep meshes
+        this.creepSources.forEach((source, id) => {
+            this.scene.removeObject(`creep_${id}`);
+            if (source.mesh?.geometry) {
+                source.mesh.geometry.dispose();
+            }
+        });
+
+        if (!this.creepSources || this.creepSources.size === 0) return;
+
+        // Create a circle mesh for each source
+        this.creepSources.forEach((source, id) => {
+            const geometry = new THREE.CircleGeometry(source.radius, 64);
+            const mesh = new THREE.Mesh(geometry, this.creepMaterial);
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.position.set(source.x, 0.15, source.z);
+            mesh.receiveShadow = true;
+            mesh.userData.isCreep = true;
+            mesh.userData.buildingId = id;
+
+            this.scene.addObject(`creep_${id}`, mesh);
+            source.mesh = mesh;
+        });
+    }
+
+    // Check if a position is on any creep source
+    isOnCreep(x, z) {
+        if (!this.creepPatches || this.creepPatches.size === 0) {
+            return false;
+        }
+
+        for (const [id, source] of this.creepPatches) {
+            const dx = x - source.x;
+            const dz = z - source.z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+
+            // Allow building within 95% of radius
+            if (distance <= source.radius * 0.95) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Animate creep with pulsing effect
+    animateCreep(time) {
+        if (this.creepMaterial) {
+            const pulse = 0.3 + Math.sin(time * 1.0) * 0.1;
+            this.creepMaterial.emissiveIntensity = pulse;
+        }
+    }
+
     dispose() {
         this.resourceNodes.forEach((node, id) => {
             this.scene.removeObject(id);
         });
         this.resourceNodes.clear();
+
+        // Clean up all creep meshes
+        this.creepSources?.forEach((source, id) => {
+            this.scene.removeObject(`creep_${id}`);
+            if (source.mesh?.geometry) {
+                source.mesh.geometry.dispose();
+            }
+        });
+        this.creepSources?.clear();
+        this.creepPatches.clear();
+
+        if (this.creepMaterial) {
+            this.creepMaterial.dispose();
+            this.creepMaterial = null;
+        }
     }
 }
 
 export default TerrainRenderer;
+
+
+
+

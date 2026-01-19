@@ -82,14 +82,21 @@ export class GameScene {
         // Lighting
         this.setupLighting();
 
-        // Grid helper (subtle)
-        const gridHelper = new THREE.GridHelper(200, 40, 0x1a1a2e, 0x0f0f1a);
-        gridHelper.position.y = 0.01;
-        this.scene.add(gridHelper);
+        // Grid helper (subtle) - can be hidden for Zerg
+        this.gridHelper = new THREE.GridHelper(200, 40, 0x1a1a2e, 0x0f0f1a);
+        this.gridHelper.position.y = 0.01;
+        this.scene.add(this.gridHelper);
 
         // Resize handler
         this.onResizeHandler = () => this.onResize();
         window.addEventListener('resize', this.onResizeHandler);
+    }
+
+    // Hide/show grid (for Zerg faction which uses creep)
+    setGridVisible(visible) {
+        if (this.gridHelper) {
+            this.gridHelper.visible = visible;
+        }
     }
 
     setupLighting() {

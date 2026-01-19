@@ -235,6 +235,15 @@ class Game {
             this.unitRenderer?.removeUnit(unit.id);
         });
 
+        // Listen for building removal (for Zerg creep retraction)
+        gameState.on('buildingRemoved', (building) => {
+            this.buildingRenderer?.removeBuilding(building.id);
+            // Remove creep for Zerg buildings
+            if (gameState.faction?.id === 'zerg') {
+                this.terrainRenderer?.removeCreep(building.id);
+            }
+        });
+
         // Initialize AI agent
         this.aiAgent = new AIAgent(gameState.faction, (action) => {
             const result = this.gameActions.executeAction(action);
@@ -295,6 +304,15 @@ class Game {
         gameState.on('productionComplete', (item) => {
             if (item.category === 'building') {
                 this.buildingRenderer?.completeConstruction(item.buildingId);
+
+                // Create creep for Zerg Creep Colony when construction completes
+                if (gameState.faction?.id === 'zerg' && item.type === 'supply') {
+                    const building = gameState.buildings.find(b => b.id === item.buildingId);
+                    if (building && this.terrainRenderer) {
+                        this.terrainRenderer.createCreep(building.id, building.x, building.z, 20, false);
+                    }
+                }
+
                 // Notify AI when building completes
                 this.notifyAIWithChat('build_complete', {
                     buildingName: item.name || item.type
@@ -349,6 +367,14 @@ class Game {
             // Listen for unit removal
             gameState.on('unitRemoved', (unit) => {
                 this.unitRenderer?.removeUnit(unit.id);
+            });
+
+            // Listen for building removal (for Zerg creep retraction)
+            gameState.on('buildingRemoved', (building) => {
+                this.buildingRenderer?.removeBuilding(building.id);
+                if (gameState.faction?.id === 'zerg') {
+                    this.terrainRenderer?.removeCreep(building.id);
+                }
             });
 
             // Initialize AI agent
@@ -421,7 +447,7 @@ class Game {
         this.scene = new GameScene(container);
 
         // Initialize renderers
-        this.terrainRenderer = new TerrainRenderer(this.scene);
+        this.terrainRenderer = new TerrainRenderer(this.scene, gameState.faction);
         this.terrainRenderer.createTerrain();
 
         this.unitRenderer = new UnitRenderer(this.scene, gameState.faction);
@@ -438,9 +464,9 @@ class Game {
             this.terrainRenderer.createGasGeyser(geyser);
         });
 
-        // Create buildings
+        // Create buildings (use onBuildingCreated to include creep for Zerg)
         gameState.buildings.forEach(building => {
-            this.buildingRenderer.createBuilding(building);
+            this.onBuildingCreated(building);
         });
 
         // Create units
@@ -486,6 +512,16 @@ class Game {
 
     onBuildingCreated(building) {
         this.buildingRenderer.createBuilding(building);
+
+        // Handle Zerg creep - only Hatchery creates creep immediately
+        // Creep Colony creep is created when construction completes (in setupProductionHandler)
+        if (gameState.faction?.id === 'zerg' && this.terrainRenderer) {
+            if (building.type === 'base') {
+                // Hatchery creates large creep circle immediately (radius 40)
+                this.terrainRenderer.createCreep(building.id, building.x, building.z, 40, true);
+            }
+            // Creep Colony creep is handled in productionComplete
+        }
     }
 
     onUnitCreated(unit) {
@@ -787,6 +823,9 @@ class Game {
     render() {
         // Animate terrain resources
         this.terrainRenderer?.animateResources(this.animationTime);
+
+        // Animate creep for Zerg
+        this.terrainRenderer?.animateCreep?.(this.animationTime);
 
         // Animate units
         this.unitRenderer?.animateUnits(this.animationTime);

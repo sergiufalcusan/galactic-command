@@ -80,6 +80,12 @@ export class InputHandler {
 
         // Handle building placement mode
         if (this.buildingPlacementMode) {
+            // Check if placement is valid (for Zerg creep restrictions)
+            if (this.ghostBuilding && this.ghostBuilding.userData.isValidPlacement === false) {
+                this.showFeedback('Must build on creep!');
+                return;
+            }
+
             const position = this.getWorldPositionFromClick(event);
             if (position && this.onBuildingPlace) {
                 this.onBuildingPlace(this.pendingBuildingType, position);
@@ -616,6 +622,7 @@ export class InputHandler {
         // Create a simple ghost mesh for the building
         const sizes = {
             supply: { size: 3, height: 2 },
+            creepcolony: { size: 3, height: 2 },
             barracks: { size: 4, height: 3 },
             factory: { size: 5, height: 4 },
             gasExtractor: { size: 3, height: 2 }
@@ -634,6 +641,8 @@ export class InputHandler {
 
         this.ghostBuilding = new THREE.Mesh(geometry, material);
         this.ghostBuilding.position.y = 0.5 + config.height / 2; // Account for platform height
+        this.ghostBuilding.userData.buildingType = buildingType; // Store for creep check
+        this.ghostMaterial = material; // Store reference for color updates
         this.scene.scene.add(this.ghostBuilding);
     }
 
@@ -662,6 +671,20 @@ export class InputHandler {
             const point = intersects[0].point;
             this.ghostBuilding.position.x = point.x;
             this.ghostBuilding.position.z = point.z;
+
+            // Check if placement is valid - Zerg must build on creep
+            let isValidPlacement = true;
+            if (gameState.faction?.id === 'zerg' && this.terrainRenderer) {
+                isValidPlacement = this.terrainRenderer.isOnCreep(point.x, point.z);
+            }
+
+            // Update ghost color based on validity
+            if (this.ghostMaterial) {
+                this.ghostMaterial.color.setHex(isValidPlacement ? 0x00ff00 : 0xff0000);
+            }
+
+            // Store validity for click handling
+            this.ghostBuilding.userData.isValidPlacement = isValidPlacement;
         }
     }
 

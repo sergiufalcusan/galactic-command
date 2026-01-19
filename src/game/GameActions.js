@@ -50,16 +50,12 @@ export class GameActions {
             case 'supply':
             case 'supplydepot':
             case 'pylon':
-            case 'overlord':
-                // Zerg uses Overlords (units) while other factions use buildings
-                if (faction.id === 'zerg') {
-                    // Spawn Overlord as a unit
-                    return this.produceOverlord();
-                }
+            case 'creepcolony':
+                // All factions now use buildings for supply
                 buildingConfig = faction.buildings.supply || faction.supplyUnit;
                 // Auto-place supply buildings in a grid pattern
                 if (useAutoPlacement) {
-                    const supplyTypes = ['supply', 'supplydepot', 'pylon'];
+                    const supplyTypes = ['supply', 'supplydepot', 'pylon', 'creepcolony'];
                     const existingCount = gameState.buildings.filter(b => supplyTypes.includes(b.type.toLowerCase())).length;
 
                     // Find first valid grid position
