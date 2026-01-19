@@ -672,10 +672,16 @@ export class InputHandler {
             this.ghostBuilding.position.x = point.x;
             this.ghostBuilding.position.z = point.z;
 
-            // Check if placement is valid - Zerg must build on creep
+            // Check if placement is valid - Zerg must build on creep (except for buildings with canBuildAnywhere)
             let isValidPlacement = true;
             if (gameState.faction?.id === 'zerg' && this.terrainRenderer) {
-                isValidPlacement = this.terrainRenderer.isOnCreep(point.x, point.z);
+                // Check if this building type can be built anywhere
+                const buildingConfig = gameState.faction.buildings?.[this.pendingBuildingType];
+                const canBuildAnywhere = buildingConfig?.canBuildAnywhere || false;
+
+                if (!canBuildAnywhere) {
+                    isValidPlacement = this.terrainRenderer.isOnCreep(point.x, point.z);
+                }
             }
 
             // Update ghost color based on validity

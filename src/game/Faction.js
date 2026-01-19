@@ -47,7 +47,19 @@ export const FACTIONS = {
                 cost: { minerals: 300, gas: 0 },
                 buildTime: 120,
                 supplyProvided: 10,
-                produces: ['drone', 'overlord']
+                spawnsLarva: true,
+                larvaMax: 3,
+                larvaSpawnInterval: 30 // seconds
+            },
+            hatchery: {
+                name: 'Hatchery',
+                cost: { minerals: 500, gas: 0 },
+                buildTime: 100,
+                supplyProvided: 10,
+                spawnsLarva: true,
+                larvaMax: 3,
+                larvaSpawnInterval: 30,
+                canBuildAnywhere: true // No creep requirement
             },
             supply: {
                 name: 'Creep Colony',
@@ -75,13 +87,21 @@ export const FACTIONS = {
             }
         },
         units: {
+            larva: {
+                name: 'Larva',
+                cost: { minerals: 0, gas: 0 },
+                buildTime: 0,
+                population: 0,
+                canEvolveInto: ['drone', 'overlord', 'zergling', 'roach', 'hydralisk']
+            },
             zergling: {
                 name: 'Zergling',
                 cost: { minerals: 50, gas: 0 },
                 buildTime: 24,
                 population: 1,
                 attack: 5,
-                health: 35
+                health: 35,
+                requiresBuilding: 'barracks' // Spawning Pool
             },
             roach: {
                 name: 'Roach',
@@ -89,7 +109,8 @@ export const FACTIONS = {
                 buildTime: 27,
                 population: 2,
                 attack: 16,
-                health: 145
+                health: 145,
+                requiresBuilding: 'factory' // Roach Warren
             },
             hydralisk: {
                 name: 'Hydralisk',
@@ -97,7 +118,8 @@ export const FACTIONS = {
                 buildTime: 33,
                 population: 2,
                 attack: 12,
-                health: 90
+                health: 90,
+                requiresBuilding: 'hydraliskDen' // Not yet in game
             }
         }
     },

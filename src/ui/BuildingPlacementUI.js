@@ -83,6 +83,16 @@ export class BuildingPlacementUI {
             { type: 'gasExtractor', key: 'G', name: faction.buildings?.gasExtractor?.name || 'Gas Extractor', cost: faction.buildings?.gasExtractor?.cost }
         ];
 
+        // Zerg can also build additional Hatcheries
+        if (faction.id === 'zerg' && faction.buildings?.hatchery) {
+            buildings.push({
+                type: 'hatchery',
+                key: 'H',
+                name: faction.buildings.hatchery.name,
+                cost: faction.buildings.hatchery.cost
+            });
+        }
+
         return buildings.map(b => {
             if (!b.cost) return '';
             const canAfford = gameState.canAfford(b.cost);

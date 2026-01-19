@@ -33,7 +33,8 @@ const MODEL_SCALES = {
     marine: 1.5,
     zergling: 1.5,
     zealot: 1.5,
-    overlord: 1.8
+    overlord: 1.8,
+    larva: 0.6
 };
 
 export class UnitRenderer {
@@ -171,6 +172,80 @@ export class UnitRenderer {
         return group;
     }
 
+    // Create a larva (worm) visual
+    createLarva(unitData) {
+        const group = new THREE.Group();
+        const scale = MODEL_SCALES.larva;
+
+        // Worm body - segmented appearance
+        const segments = 5;
+        const segmentMaterial = new THREE.MeshStandardMaterial({
+            color: this.colors.primary,
+            roughness: 0.5,
+            metalness: 0.2,
+            emissive: this.colors.emissive,
+            emissiveIntensity: 0.4
+        });
+
+        // Create body segments
+        for (let i = 0; i < segments; i++) {
+            const segmentSize = scale * (1 - i * 0.15); // Taper towards tail
+            const geometry = new THREE.SphereGeometry(segmentSize, 8, 6);
+            const segment = new THREE.Mesh(geometry, segmentMaterial);
+            segment.position.z = i * scale * 0.8; // Space segments
+            segment.position.y = 0.3;
+            segment.castShadow = true;
+            segment.name = `segment_${i}`;
+            group.add(segment);
+        }
+
+        // Add eyes (two small spheres on front segment)
+        const eyeMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffff00,
+            emissive: 0xffaa00,
+            emissiveIntensity: 0.8
+        });
+        const eyeGeometry = new THREE.SphereGeometry(scale * 0.15, 6, 4);
+
+        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        leftEye.position.set(-scale * 0.3, 0.4, -scale * 0.2);
+        group.add(leftEye);
+
+        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        rightEye.position.set(scale * 0.3, 0.4, -scale * 0.2);
+        group.add(rightEye);
+
+        // Add invisible selection hitbox
+        const hitboxGeometry = new THREE.CylinderGeometry(0.8, 0.8, 1, 8);
+        const hitboxMaterial = new THREE.MeshBasicMaterial({
+            visible: false,
+            transparent: true,
+            opacity: 0
+        });
+        const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
+        hitbox.position.y = 0.5;
+        hitbox.userData.unitData = unitData;
+        group.add(hitbox);
+
+        // Selection ring
+        const selectionRing = this.createSelectionRing();
+        selectionRing.visible = false;
+        selectionRing.scale.setScalar(0.6); // Smaller ring for larva
+        group.add(selectionRing);
+        group.userData.selectionRing = selectionRing;
+
+        // Position
+        group.position.set(unitData.x, 0, unitData.z);
+        group.userData.unitData = unitData;
+        group.userData.isLarva = true;
+        group.userData.wiggleOffset = Math.random() * Math.PI * 2; // Random start phase
+
+        this.scene.addObject(unitData.id, group);
+        this.units.set(unitData.id, group);
+
+        return group;
+    }
+
     async createCombatUnit(unitData) {
         const group = new THREE.Group();
 
@@ -280,6 +355,25 @@ export class UnitRenderer {
         this.units.forEach((group, id) => {
             const data = group.userData.unitData;
             if (!data) return;
+
+            // Larva wiggling animation
+            if (group.userData.isLarva) {
+                const offset = group.userData.wiggleOffset || 0;
+                const wiggleTime = time * 3 + offset;
+
+                // Wiggle each segment with wave motion
+                for (let i = 0; i < 5; i++) {
+                    const segment = group.getObjectByName(`segment_${i}`);
+                    if (segment) {
+                        segment.position.x = Math.sin(wiggleTime + i * 0.5) * 0.15;
+                        segment.position.y = 0.3 + Math.sin(wiggleTime * 2 + i * 0.3) * 0.05;
+                    }
+                }
+
+                // Slow random rotation (wandering)
+                group.rotation.y += Math.sin(wiggleTime * 0.5) * 0.002;
+                return; // Skip other animations for larva
+            }
 
             // Idle bobbing animation for Protoss
             if (this.faction.id === 'protoss') {

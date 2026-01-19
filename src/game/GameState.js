@@ -39,6 +39,10 @@ class GameState {
         this.mineralWorkers = [];
         this.gasWorkers = [];
 
+        // Zerg larva system
+        this.larvaByHatchery = new Map(); // hatcheryId -> [larvaIds]
+        this.lastLarvaSpawn = new Map(); // hatcheryId -> timestamp (seconds)
+
         // Event listeners
         this.listeners = new Map();
     }
@@ -171,6 +175,14 @@ class GameState {
         }
 
         this.population = workerCount;
+
+        // Spawn initial larva for Zerg faction
+        if (this.faction.id === 'zerg') {
+            const base = this.buildings.find(b => b.type === 'base');
+            if (base) {
+                this.spawnInitialLarva(base);
+            }
+        }
     }
 
     // Check if a position is too close to any existing unit
@@ -645,6 +657,182 @@ class GameState {
         }
 
         this.emit('productionComplete', item);
+    }
+
+    // ============== ZERG LARVA SYSTEM ==============
+
+    // Spawn initial larva for a Hatchery (called at game start)
+    spawnInitialLarva(hatchery) {
+        const config = this.faction.buildings.base;
+        const larvaMax = config.larvaMax || 3;
+
+        this.larvaByHatchery.set(hatchery.id, []);
+        this.lastLarvaSpawn.set(hatchery.id, this.gameTime);
+
+        for (let i = 0; i < larvaMax; i++) {
+            this.spawnLarva(hatchery);
+        }
+    }
+
+    // Spawn a single larva near a Hatchery
+    spawnLarva(hatchery) {
+        const config = this.faction.buildings.base;
+        const larvaMax = config.larvaMax || 3;
+
+        const currentLarva = this.larvaByHatchery.get(hatchery.id) || [];
+        // Filter out any removed larva
+        const validLarva = currentLarva.filter(id => this.units.find(u => u.id === id));
+        this.larvaByHatchery.set(hatchery.id, validLarva);
+
+        if (validLarva.length >= larvaMax) return null;
+
+        // Spawn position near hatchery (wiggling distance)
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 3 + Math.random() * 2;
+        const spawnX = hatchery.x + Math.cos(angle) * distance;
+        const spawnZ = hatchery.z + Math.sin(angle) * distance;
+
+        const larva = this.addUnit({
+            type: 'larva',
+            name: 'Larva',
+            x: spawnX,
+            z: spawnZ,
+            health: 25,
+            maxHealth: 25,
+            state: 'idle',
+            parentHatcheryId: hatchery.id
+        });
+
+        validLarva.push(larva.id);
+        this.larvaByHatchery.set(hatchery.id, validLarva);
+
+        this.emit('larvaSpawned', { larva, hatchery });
+        return larva;
+    }
+
+    // Get larva count for a Hatchery
+    getLarvaForHatchery(hatcheryId) {
+        const larvaIds = this.larvaByHatchery.get(hatcheryId) || [];
+        return larvaIds.filter(id => this.units.find(u => u.id === id));
+    }
+
+    // Update larva spawning (call every game tick)
+    updateLarvaSpawning() {
+        if (this.faction?.id !== 'zerg') return;
+
+        const config = this.faction.buildings.base;
+        const spawnInterval = config.larvaSpawnInterval || 30;
+
+        // Find all Hatcheries (base type and hatchery type)
+        const hatcheries = this.buildings.filter(b =>
+            (b.type === 'base' || b.type === 'hatchery') && b.isComplete
+        );
+
+        hatcheries.forEach(hatchery => {
+            // Initialize if not tracked
+            if (!this.larvaByHatchery.has(hatchery.id)) {
+                this.larvaByHatchery.set(hatchery.id, []);
+                this.lastLarvaSpawn.set(hatchery.id, this.gameTime);
+            }
+
+            const lastSpawn = this.lastLarvaSpawn.get(hatchery.id) || 0;
+            const timeSinceSpawn = this.gameTime - lastSpawn;
+
+            if (timeSinceSpawn >= spawnInterval) {
+                const spawned = this.spawnLarva(hatchery);
+                if (spawned) {
+                    this.lastLarvaSpawn.set(hatchery.id, this.gameTime);
+                }
+            }
+        });
+    }
+
+    // Evolve a larva into a unit
+    evolveLarva(larvaId, targetUnitType) {
+        const larva = this.units.find(u => u.id === larvaId && u.type === 'larva');
+        if (!larva) return { success: false, error: 'Larva not found' };
+
+        // Check what units this larva can become
+        const larvaConfig = this.faction.units.larva;
+        if (!larvaConfig.canEvolveInto.includes(targetUnitType)) {
+            return { success: false, error: 'Cannot evolve into that unit' };
+        }
+
+        // Get target unit config (check units, worker, supplyUnit)
+        let unitConfig;
+        if (targetUnitType === 'drone') {
+            unitConfig = this.faction.worker;
+        } else if (targetUnitType === 'overlord') {
+            unitConfig = this.faction.supplyUnit;
+        } else {
+            unitConfig = this.faction.units[targetUnitType];
+        }
+
+        if (!unitConfig) return { success: false, error: 'Unknown unit type' };
+
+        // Check tech requirements
+        if (unitConfig.requiresBuilding) {
+            const hasBuilding = this.buildings.some(b =>
+                b.type === unitConfig.requiresBuilding && b.isComplete
+            );
+            if (!hasBuilding) {
+                return { success: false, error: 'Requires tech building' };
+            }
+        }
+
+        // Check cost
+        if (!this.canAfford(unitConfig.cost)) {
+            return { success: false, error: 'Not enough resources' };
+        }
+
+        // Check population (except for Overlord which adds supply)
+        const isSupplyUnit = targetUnitType === 'overlord';
+        const popCost = unitConfig.population || 1;
+        if (!isSupplyUnit && !this.canAddPopulation(popCost)) {
+            return { success: false, error: 'Not enough supply' };
+        }
+
+        // Spend resources
+        this.spendResources(unitConfig.cost);
+
+        // Remove larva from tracking
+        this.removeLarva(larva);
+
+        // Add to production queue (evolving in place)
+        this.addToProductionQueue({
+            category: 'unit',
+            unitType: targetUnitType === 'drone' ? 'worker' : targetUnitType,
+            name: unitConfig.name,
+            buildTime: unitConfig.buildTime,
+            population: popCost,
+            health: unitConfig.health || 40,
+            producerId: larva.parentHatcheryId,
+            producerType: 'hatchery',
+            producerX: larva.x,
+            producerZ: larva.z,
+            isSupplyUnit: isSupplyUnit,
+            supplyProvided: unitConfig.supplyProvided || 0,
+            isEvolution: true,
+            larvaId: larvaId
+        });
+
+        this.emit('larvaEvolutionStarted', { larvaId, targetUnitType });
+        return { success: true };
+    }
+
+    // Remove a larva (when evolving or dying)
+    removeLarva(larva) {
+        // Remove from units array
+        this.removeUnit(larva.id);
+
+        // Remove from Hatchery tracking
+        if (larva.parentHatcheryId && this.larvaByHatchery.has(larva.parentHatcheryId)) {
+            const larvaIds = this.larvaByHatchery.get(larva.parentHatcheryId);
+            const index = larvaIds.indexOf(larva.id);
+            if (index > -1) {
+                larvaIds.splice(index, 1);
+            }
+        }
     }
 
     // Game time

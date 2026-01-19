@@ -118,7 +118,8 @@ class Game {
                 's': 'supply',
                 'r': 'barracks',
                 'f': 'factory',
-                'g': 'gasExtractor'
+                'g': 'gasExtractor',
+                'h': 'hatchery'  // Zerg only - Hatchery expansion
             };
             const building = buildingMap[e.key.toLowerCase()];
             if (building) {
@@ -244,6 +245,19 @@ class Game {
             }
         });
 
+        // Listen for larva spawning (Zerg)
+        gameState.on('larvaSpawned', ({ larva, hatchery }) => {
+            if (this.unitRenderer && larva) {
+                this.unitRenderer.createLarva(larva);
+            }
+        });
+
+        // Listen for larva evolution start
+        gameState.on('larvaEvolutionStarted', ({ larvaId, targetUnitType }) => {
+            // Remove larva visual when evolution starts
+            this.unitRenderer?.removeUnit(larvaId);
+        });
+
         // Initialize AI agent
         this.aiAgent = new AIAgent(gameState.faction, (action) => {
             const result = this.gameActions.executeAction(action);
@@ -305,11 +319,21 @@ class Game {
             if (item.category === 'building') {
                 this.buildingRenderer?.completeConstruction(item.buildingId);
 
-                // Create creep for Zerg Creep Colony when construction completes
-                if (gameState.faction?.id === 'zerg' && item.type === 'supply') {
+                // Create creep for Zerg buildings when construction completes
+                if (gameState.faction?.id === 'zerg') {
                     const building = gameState.buildings.find(b => b.id === item.buildingId);
+
                     if (building && this.terrainRenderer) {
-                        this.terrainRenderer.createCreep(building.id, building.x, building.z, 20, false);
+                        // Creep Colony gets radius 20
+                        if (item.type === 'supply') {
+                            this.terrainRenderer.createCreep(building.id, building.x, building.z, 20, false);
+                        }
+                        // Additional Hatcheries get radius 40 and spawn larva
+                        if (item.type === 'hatchery') {
+                            this.terrainRenderer.createCreep(building.id, building.x, building.z, 40, true);
+                            // Spawn initial larva for new Hatchery
+                            gameState.spawnInitialLarva(building);
+                        }
                     }
                 }
 
@@ -588,6 +612,9 @@ class Game {
         gameState.updateGameTime(deltaTime);
         gameState.gatherResources(deltaTime);
         gameState.updateProductionQueue(deltaTime);
+
+        // Update Zerg larva spawning
+        gameState.updateLarvaSpawning();
 
         // Update HUD
         this.hud?.update();

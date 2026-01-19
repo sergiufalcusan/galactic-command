@@ -120,6 +120,79 @@ export class HUD {
             this.addActionButton('⛏️', 'Mine', () => gameState.assignWorkerToMinerals(entity.id));
             this.addActionButton('🔥', 'Gas', () => gameState.assignWorkerToGas(entity.id));
         }
+
+        // Larva evolution options (Zerg only)
+        if (entity.type === 'larva' && gameState.faction?.id === 'zerg') {
+            this.showLarvaEvolutionOptions(entity);
+        }
+    }
+
+    // Show evolution options for a selected larva
+    showLarvaEvolutionOptions(larva) {
+        const faction = gameState.faction;
+        if (!faction) return;
+
+        const larvaConfig = faction.units.larva;
+        if (!larvaConfig?.canEvolveInto) return;
+
+        // Build list of available evolutions
+        const evolutions = [];
+
+        larvaConfig.canEvolveInto.forEach(unitType => {
+            let unitConfig, icon;
+
+            if (unitType === 'drone') {
+                unitConfig = faction.worker;
+                icon = '🐜';
+            } else if (unitType === 'overlord') {
+                unitConfig = faction.supplyUnit;
+                icon = '🎈';
+            } else {
+                unitConfig = faction.units[unitType];
+                icon = this.getUnitIcon(unitType);
+            }
+
+            if (!unitConfig) return;
+
+            // Check tech requirements
+            if (unitConfig.requiresBuilding) {
+                const hasBuilding = gameState.buildings.some(b =>
+                    b.type === unitConfig.requiresBuilding && b.isComplete
+                );
+                if (!hasBuilding) return; // Skip - tech not researched
+            }
+
+            evolutions.push({
+                type: unitType,
+                config: unitConfig,
+                icon: icon
+            });
+        });
+
+        // Add evolution buttons
+        evolutions.forEach(evo => {
+            const cost = evo.config.cost;
+            const costText = `${cost.minerals}m${cost.gas > 0 ? ` ${cost.gas}g` : ''}`;
+            const canAfford = gameState.canAfford(cost);
+
+            const btn = document.createElement('button');
+            btn.className = 'action-btn evolution-btn' + (canAfford ? '' : ' disabled');
+            btn.innerHTML = evo.icon;
+            btn.title = `Evolve to ${evo.config.name} (${costText})`;
+            btn.addEventListener('click', () => {
+                if (canAfford) {
+                    const result = gameState.evolveLarva(larva.id, evo.type);
+                    if (result.success) {
+                        this.showNotification(`Evolving to ${evo.config.name}...`);
+                    } else {
+                        this.showNotification(result.error || 'Cannot evolve');
+                    }
+                } else {
+                    this.showNotification('Not enough resources!');
+                }
+            });
+            this.actionButtons.appendChild(btn);
+        });
     }
 
     addActionButton(icon, tooltip, onClick) {
@@ -152,20 +225,24 @@ export class HUD {
 
         const buildingType = building.type?.toLowerCase();
 
-        // Base buildings can train workers
-        if (buildingType === 'base') {
-            trainableUnits.push({
-                key: 'worker',
-                data: faction.worker,
-                icon: this.getUnitIcon('worker')
-            });
-
-            // Zerg can also train Overlords from Hatchery
-            if (faction.id === 'zerg' && faction.supplyUnit) {
+        // Base buildings can train workers (except Zerg which uses larva)
+        if (buildingType === 'base' || buildingType === 'hatchery') {
+            // Zerg Hatchery uses larva system - no direct unit production
+            if (faction.id === 'zerg') {
+                // Show larva info instead of production buttons
+                if (building.isComplete) {
+                    const larvaInfo = document.createElement('div');
+                    larvaInfo.className = 'larva-info';
+                    larvaInfo.style.cssText = 'color: #8b00ff; font-size: 0.85rem; padding: 8px; text-align: center;';
+                    const larvaCount = gameState.getLarvaForHatchery(building.id)?.length || 0;
+                    larvaInfo.textContent = `Larva: ${larvaCount}/3 (click a larva to evolve)`;
+                    this.actionButtons.appendChild(larvaInfo);
+                }
+            } else {
                 trainableUnits.push({
-                    key: 'overlord',
-                    data: faction.supplyUnit,
-                    icon: '🎈'
+                    key: 'worker',
+                    data: faction.worker,
+                    icon: this.getUnitIcon('worker')
                 });
             }
         }
