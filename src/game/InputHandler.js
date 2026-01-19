@@ -523,6 +523,11 @@ export class InputHandler {
         this.selectedUnits.forEach(unitId => {
             const unit = gameState.units.find(u => u.id === unitId);
             if (unit) {
+                // Skip larva and eggs - they cannot be commanded
+                if (unit.type === 'larva' || unit.type === 'egg') {
+                    return;
+                }
+
                 // Remove from worker assignments
                 gameState.mineralWorkers = gameState.mineralWorkers.filter(id => id !== unitId);
                 gameState.gasWorkers = gameState.gasWorkers.filter(id => id !== unitId);

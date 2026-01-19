@@ -240,8 +240,94 @@ export class UnitRenderer {
         group.userData.isLarva = true;
         group.userData.wiggleOffset = Math.random() * Math.PI * 2; // Random start phase
 
+        // Autonomous movement properties
+        group.userData.targetAngle = Math.random() * Math.PI * 2;
+        group.userData.movementTimer = 0;
+        group.userData.nextMoveTime = 2 + Math.random() * 3;
+
         this.scene.addObject(unitData.id, group);
         this.units.set(unitData.id, group);
+
+        return group;
+    }
+
+    // Create an evolution egg (when larva is evolving into a unit)
+    createEvolutionEgg(eggData) {
+        const group = new THREE.Group();
+
+        // Main egg shell - translucent purple
+        const eggGeometry = new THREE.SphereGeometry(1.2, 16, 12);
+        const eggMaterial = new THREE.MeshStandardMaterial({
+            color: this.colors.primary,
+            roughness: 0.3,
+            metalness: 0.4,
+            emissive: this.colors.emissive,
+            emissiveIntensity: 0.6,
+            transparent: true,
+            opacity: 0.7
+        });
+        const egg = new THREE.Mesh(eggGeometry, eggMaterial);
+        egg.position.y = 1.2;
+        egg.scale.set(1, 1.3, 1); // Elongate vertically
+        egg.castShadow = true;
+        egg.name = 'eggShell';
+        group.add(egg);
+
+        // Inner glow core
+        const coreGeometry = new THREE.SphereGeometry(0.6, 12, 8);
+        const coreMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffaa00,
+            emissive: 0xff6600,
+            emissiveIntensity: 1.0,
+            transparent: true,
+            opacity: 0.8
+        });
+        const core = new THREE.Mesh(coreGeometry, coreMaterial);
+        core.position.y = 1.2;
+        core.name = 'eggCore';
+        group.add(core);
+
+        // Veins/texture on egg surface
+        const veinMaterial = new THREE.MeshBasicMaterial({
+            color: this.colors.secondary,
+            transparent: true,
+            opacity: 0.5
+        });
+        for (let i = 0; i < 5; i++) {
+            const veinGeometry = new THREE.TorusGeometry(0.8 + i * 0.1, 0.02, 4, 16);
+            const vein = new THREE.Mesh(veinGeometry, veinMaterial);
+            vein.position.y = 0.8 + i * 0.3;
+            vein.rotation.x = Math.random() * 0.5;
+            vein.rotation.z = Math.random() * Math.PI;
+            group.add(vein);
+        }
+
+        // Add invisible selection hitbox
+        const hitboxGeometry = new THREE.CylinderGeometry(1.5, 1.5, 3, 8);
+        const hitboxMaterial = new THREE.MeshBasicMaterial({
+            visible: false,
+            transparent: true,
+            opacity: 0
+        });
+        const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
+        hitbox.position.y = 1.5;
+        hitbox.userData.unitData = eggData;
+        group.add(hitbox);
+
+        // Selection ring
+        const selectionRing = this.createSelectionRing();
+        selectionRing.visible = false;
+        group.add(selectionRing);
+        group.userData.selectionRing = selectionRing;
+
+        // Position
+        group.position.set(eggData.x, 0, eggData.z);
+        group.userData.unitData = eggData;
+        group.userData.isEvolutionEgg = true;
+        group.userData.pulseOffset = Math.random() * Math.PI * 2;
+
+        this.scene.addObject(eggData.id, group);
+        this.units.set(eggData.id, group);
 
         return group;
     }
@@ -356,23 +442,94 @@ export class UnitRenderer {
             const data = group.userData.unitData;
             if (!data) return;
 
-            // Larva wiggling animation
+            // Evolution egg pulsing animation
+            if (group.userData.isEvolutionEgg) {
+                const offset = group.userData.pulseOffset || 0;
+                const pulseTime = time * 2 + offset;
+
+                // Pulse the egg shell
+                const eggShell = group.getObjectByName('eggShell');
+                if (eggShell) {
+                    const scale = 1 + Math.sin(pulseTime) * 0.05;
+                    eggShell.scale.set(scale, scale * 1.3, scale);
+                    eggShell.material.emissiveIntensity = 0.6 + Math.sin(pulseTime * 2) * 0.2;
+                }
+
+                // Pulse the inner core
+                const core = group.getObjectByName('eggCore');
+                if (core) {
+                    const coreScale = 0.6 + Math.sin(pulseTime * 1.5) * 0.1;
+                    core.scale.setScalar(coreScale);
+                    core.material.emissiveIntensity = 1.0 + Math.sin(pulseTime * 3) * 0.3;
+                }
+
+                return; // Skip other animations for eggs
+            }
+
+            // Larva wiggling and autonomous movement
             if (group.userData.isLarva) {
                 const offset = group.userData.wiggleOffset || 0;
-                const wiggleTime = time * 3 + offset;
+                const wiggleTime = time * 6 + offset; // Fast wiggle
+
+                // Wiggle the whole group side to side (visible motion)
+                const wiggleAmount = Math.sin(wiggleTime) * 0.3;
 
                 // Wiggle each segment with wave motion
                 for (let i = 0; i < 5; i++) {
                     const segment = group.getObjectByName(`segment_${i}`);
                     if (segment) {
-                        segment.position.x = Math.sin(wiggleTime + i * 0.5) * 0.15;
-                        segment.position.y = 0.3 + Math.sin(wiggleTime * 2 + i * 0.3) * 0.05;
+                        segment.position.x = Math.sin(wiggleTime + i * 0.6) * 0.25;
+                        segment.position.y = 0.3 + Math.sin(wiggleTime * 2 + i * 0.4) * 0.1;
                     }
                 }
 
-                // Slow random rotation (wandering)
-                group.rotation.y += Math.sin(wiggleTime * 0.5) * 0.002;
-                return; // Skip other animations for larva
+                // Initialize movement
+                if (!group.userData.larvaInitialized) {
+                    group.userData.larvaInitialized = true;
+                    group.userData.baseX = group.position.x;
+                    group.userData.baseZ = group.position.z;
+                    group.userData.wanderAngle = Math.random() * Math.PI * 2;
+                    group.userData.wanderTimer = 0;
+                }
+
+                // Constant movement
+                group.userData.wanderTimer += 0.016;
+
+                // Change direction frequently
+                if (group.userData.wanderTimer > 1.0) {
+                    group.userData.wanderAngle += (Math.random() - 0.5) * Math.PI * 1.5;
+                    group.userData.wanderTimer = 0;
+                }
+
+                // Movement speed
+                const moveSpeed = 2.0;
+                const dx = Math.cos(group.userData.wanderAngle) * moveSpeed * 0.016;
+                const dz = Math.sin(group.userData.wanderAngle) * moveSpeed * 0.016;
+                group.position.x += dx;
+                group.position.z += dz;
+
+                // Keep within area around spawn
+                const distFromBase = Math.sqrt(
+                    Math.pow(group.position.x - group.userData.baseX, 2) +
+                    Math.pow(group.position.z - group.userData.baseZ, 2)
+                );
+                if (distFromBase > 5) {
+                    group.userData.wanderAngle = Math.atan2(
+                        group.userData.baseZ - group.position.z,
+                        group.userData.baseX - group.position.x
+                    );
+                }
+
+                // Face movement direction with wiggle
+                group.rotation.y = group.userData.wanderAngle + wiggleAmount;
+
+                // Update unit data position
+                if (data) {
+                    data.x = group.position.x;
+                    data.z = group.position.z;
+                }
+
+                return;
             }
 
             // Idle bobbing animation for Protoss

@@ -133,7 +133,7 @@ class GameState {
         this.populationMax = base.supplyProvided;
 
         // Starting workers - spawn outside the base with proper spacing
-        const workerCount = 6;
+        const workerCount = 4;
         const minDistance = 2.0; // Minimum distance between workers
         const spawnRadius = 8; // Distance from base center (outside the base)
 
@@ -595,9 +595,21 @@ class GameState {
             const spawnDistance = 6; // Spawn distance from building
             const minUnitDistance = 2.0; // Minimum distance between units
 
-            const spawnPos = this.findNonOverlappingSpawnPosition(
-                spawnBaseX, spawnBaseZ, spawnDistance, minUnitDistance
-            );
+            // For Zerg evolution, remove the egg first and spawn at egg position
+            if (item.isEvolution && item.eggId) {
+                const egg = this.units.find(u => u.id === item.eggId);
+                if (egg) {
+                    spawnBaseX = egg.x;
+                    spawnBaseZ = egg.z;
+                    // Remove egg from units
+                    this.removeUnit(egg.id);
+                    this.emit('eggHatched', { eggId: item.eggId });
+                }
+            }
+
+            const spawnPos = item.isEvolution ?
+                { x: spawnBaseX, z: spawnBaseZ } : // Evolution: spawn at egg position
+                this.findNonOverlappingSpawnPosition(spawnBaseX, spawnBaseZ, spawnDistance, minUnitDistance);
 
             this.addUnit({
                 type: item.unitType,
@@ -686,9 +698,9 @@ class GameState {
 
         if (validLarva.length >= larvaMax) return null;
 
-        // Spawn position near hatchery (wiggling distance)
+        // Spawn position close to hatchery (StarCraft style)
         const angle = Math.random() * Math.PI * 2;
-        const distance = 3 + Math.random() * 2;
+        const distance = 6 + Math.random() * 2; // Close to Hatchery (6-8 units)
         const spawnX = hatchery.x + Math.cos(angle) * distance;
         const spawnZ = hatchery.z + Math.sin(angle) * distance;
 
@@ -795,13 +807,31 @@ class GameState {
         // Spend resources
         this.spendResources(unitConfig.cost);
 
-        // Remove larva from tracking
-        this.removeLarva(larva);
+        // Convert larva to egg (keeps same ID for tracking)
+        larva.type = 'egg';
+        larva.name = `Evolving ${unitConfig.name}`;
+        larva.evolvingTo = targetUnitType;
+        larva.evolveUnitType = targetUnitType === 'drone' ? 'worker' : targetUnitType;
+        larva.evolveBuildTime = unitConfig.buildTime;
+        larva.evolveProgress = 0;
+        larva.evolveHealth = unitConfig.health || 40;
+        larva.evolvePopulation = popCost;
+        larva.evolveIsSupplyUnit = isSupplyUnit;
+        larva.evolveSupplyProvided = unitConfig.supplyProvided || 0;
+
+        // Remove from larva tracking
+        if (larva.parentHatcheryId && this.larvaByHatchery.has(larva.parentHatcheryId)) {
+            const larvaIds = this.larvaByHatchery.get(larva.parentHatcheryId);
+            const index = larvaIds.indexOf(larva.id);
+            if (index > -1) {
+                larvaIds.splice(index, 1);
+            }
+        }
 
         // Add to production queue (evolving in place)
         this.addToProductionQueue({
             category: 'unit',
-            unitType: targetUnitType === 'drone' ? 'worker' : targetUnitType,
+            unitType: larva.evolveUnitType,
             name: unitConfig.name,
             buildTime: unitConfig.buildTime,
             population: popCost,
@@ -813,10 +843,10 @@ class GameState {
             isSupplyUnit: isSupplyUnit,
             supplyProvided: unitConfig.supplyProvided || 0,
             isEvolution: true,
-            larvaId: larvaId
+            eggId: larvaId  // Track which egg this production belongs to
         });
 
-        this.emit('larvaEvolutionStarted', { larvaId, targetUnitType });
+        this.emit('larvaEvolutionStarted', { larvaId, targetUnitType, eggData: larva });
         return { success: true };
     }
 

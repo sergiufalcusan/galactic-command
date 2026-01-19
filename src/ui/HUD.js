@@ -125,6 +125,42 @@ export class HUD {
         if (entity.type === 'larva' && gameState.faction?.id === 'zerg') {
             this.showLarvaEvolutionOptions(entity);
         }
+
+        // Evolution egg - show progress
+        if (entity.type === 'egg' && entity.evolvingTo) {
+            this.showEggProgress(entity);
+        }
+    }
+
+    // Show evolution progress for a selected egg
+    showEggProgress(egg) {
+        // Find the production queue item for this egg
+        const queueItem = gameState.productionQueue.find(item =>
+            item.isEvolution && item.eggId === egg.id
+        );
+
+        const evolveInfo = document.createElement('div');
+        evolveInfo.className = 'egg-progress-info';
+        evolveInfo.style.cssText = 'padding: 10px; text-align: center;';
+
+        if (queueItem) {
+            const progress = queueItem.progress / queueItem.buildTime;
+            const timeRemaining = Math.ceil(queueItem.buildTime - queueItem.progress);
+
+            evolveInfo.innerHTML = `
+                <div style="color: #8b00ff; font-weight: bold; margin-bottom: 8px;">🥚 Evolving to ${queueItem.name}</div>
+                <div style="background: #333; border-radius: 4px; height: 8px; margin: 8px 0; overflow: hidden;">
+                    <div style="background: linear-gradient(90deg, #8b00ff, #ff6600); height: 100%; width: ${progress * 100}%; transition: width 0.3s;"></div>
+                </div>
+                <div style="color: #aaa; font-size: 0.9rem;">${timeRemaining}s remaining</div>
+            `;
+        } else {
+            evolveInfo.innerHTML = `
+                <div style="color: #8b00ff;">🥚 ${egg.name || 'Evolving...'}</div>
+            `;
+        }
+
+        this.actionButtons.appendChild(evolveInfo);
     }
 
     // Show evolution options for a selected larva

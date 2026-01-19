@@ -252,10 +252,14 @@ class Game {
             }
         });
 
-        // Listen for larva evolution start
-        gameState.on('larvaEvolutionStarted', ({ larvaId, targetUnitType }) => {
-            // Remove larva visual when evolution starts
+        // Listen for larva evolution start - replace larva with egg
+        gameState.on('larvaEvolutionStarted', ({ larvaId, targetUnitType, eggData }) => {
+            // Remove larva visual
             this.unitRenderer?.removeUnit(larvaId);
+            // Create egg visual in its place
+            if (this.unitRenderer && eggData) {
+                this.unitRenderer.createEvolutionEgg(eggData);
+            }
         });
 
         // Initialize AI agent
@@ -497,6 +501,12 @@ class Game {
         gameState.units.forEach(unit => {
             if (unit.type === 'worker') {
                 this.unitRenderer.createWorker(unit);
+            } else if (unit.type === 'larva') {
+                // Create larva with proper animation support
+                this.unitRenderer.createLarva(unit);
+            } else if (unit.type === 'egg') {
+                // Create evolution egg
+                this.unitRenderer.createEvolutionEgg(unit);
             } else {
                 this.unitRenderer.createCombatUnit(unit);
             }
