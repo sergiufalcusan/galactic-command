@@ -45,10 +45,8 @@ const VOICE_SETTINGS = {
 export class VoiceSynthesis {
     constructor(factionId) {
         this.factionId = factionId;
-        this.apiKey = null;
         this.voiceId = DEFAULT_VOICE_IDS[factionId] || DEFAULT_VOICE_IDS.human;
         this.settings = VOICE_SETTINGS[factionId] || VOICE_SETTINGS.human;
-        this.isEnabled = false;
         this.isSpeaking = false;
         this.audioQueue = [];
         this.currentAudio = null;
@@ -56,11 +54,19 @@ export class VoiceSynthesis {
 
         // Audio context for processing
         this.audioContext = null;
-    }
 
-    setApiKey(key) {
-        this.apiKey = key;
-        this.isEnabled = !!key;
+        // Check localStorage for voice enabled setting (default to true)
+        // Keys are stored in backend, so we just check the user preference
+        this.isEnabled = localStorage.getItem('voiceEnabled') !== 'false';
+
+        // Listen for setting changes
+        this.onSettingChange = (e) => {
+            this.isEnabled = e.detail.enabled;
+            if (!this.isEnabled) {
+                this.stop();
+            }
+        };
+        window.addEventListener('voiceSettingChanged', this.onSettingChange);
     }
 
     setVoiceId(voiceId) {
@@ -69,10 +75,6 @@ export class VoiceSynthesis {
 
     async speak(text, interrupt = true) {
         if (!this.isEnabled) {
-            return false;
-        }
-
-        if (!this.apiKey) {
             return false;
         }
 
@@ -222,40 +224,15 @@ export class VoiceSynthesis {
     }
 
     setEnabled(enabled) {
-        this.isEnabled = enabled && !!this.apiKey;
+        this.isEnabled = enabled;
         if (!enabled) {
             this.stop();
         }
     }
-
-    // Get available voices from ElevenLabs (for settings UI)
-    async getAvailableVoices() {
-        if (!this.apiKey) return [];
-
-        try {
-            const response = await fetch('https://api.elevenlabs.io/v1/voices', {
-                headers: {
-                    'xi-api-key': this.apiKey
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to fetch voices: ${response.status}`);
-            }
-
-            const data = await response.json();
-            return data.voices.map(v => ({
-                id: v.voice_id,
-                name: v.name,
-                category: v.category
-            }));
-        } catch (error) {
-            console.error('Error fetching voices:', error);
-            return [];
-        }
-    }
     dispose() {
         this.stop();
+        // Remove event listener
+        window.removeEventListener('voiceSettingChanged', this.onSettingChange);
         if (this.audioContext) {
             this.audioContext.close();
             this.audioContext = null;

@@ -157,26 +157,42 @@ export class InputHandler {
             const clickPoint = primaryHit.point;
 
             if (hitObject) {
-                // Check if it's a mineral patch
-                const resourceId = hitObject.userData?.id || hitObject.parent?.userData?.id;
-                const nodeData = this.terrainRenderer.resourceNodes.get(resourceId);
+                // Check if it's a mineral patch or gas geyser (via userdata or parent)
+                const resourceType = hitObject.userData?.type;
+                const resourceId = hitObject.userData?.id;
 
-                if (hitObject.userData?.type === 'mineral' || nodeData?.type === 'mineral') {
+                if (resourceType === 'mineral') {
                     this.commandMineMinerals(resourceId);
                     return;
-                }
-                // Check if it's a gas geyser
-                else if (hitObject.userData?.type === 'gas' || nodeData?.type === 'gas') {
+                } else if (resourceType === 'gas') {
                     this.commandHarvestGas(resourceId);
                     return;
                 }
-                // Check if it's a building under construction
-                else if (hitObject.userData?.buildingData) {
+
+                // Check for building-related actions
+                if (hitObject.userData?.buildingData) {
                     const bData = hitObject.userData.buildingData;
                     const building = gameState.buildings.find(b => b.id === bData.id);
-                    if (building && !building.isComplete && gameState.faction.id === 'human') {
-                        this.commandConstruct(building.id);
-                        return;
+
+                    if (building) {
+                        // Action 1: Help with construction (Human SCVs)
+                        if (!building.isComplete && gameState.faction.id === 'human') {
+                            this.commandConstruct(building.id);
+                            return;
+                        }
+
+                        // Action 2: Harvest gas from extractor
+                        const gasTypes = ['gasextractor', 'extractor', 'refinery', 'assimilator'];
+                        if (gasTypes.includes(building.type?.toLowerCase()) && building.isComplete) {
+                            // Find the geyser at this building's position
+                            const geyser = gameState.gasGeysers.find(g =>
+                                Math.abs(g.x - building.x) < 2 && Math.abs(g.z - building.z) < 2
+                            );
+                            if (geyser) {
+                                this.commandHarvestGas(geyser.id);
+                                return;
+                            }
+                        }
                     }
                 }
             }

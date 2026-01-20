@@ -117,6 +117,11 @@ export class GameActions {
                 }
                 break;
 
+            case 'hatchery':
+                buildingConfig = faction.buildings.hatchery;
+                // Hatchery uses manual placement only (expansion)
+                break;
+
             case 'gasextractor':
             case 'extractor':
             case 'refinery':

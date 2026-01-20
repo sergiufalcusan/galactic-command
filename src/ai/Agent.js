@@ -126,10 +126,6 @@ RULES:
         this.apiKey = key;
     }
 
-    setVoiceApiKey(key) {
-        this.voice.setApiKey(key);
-    }
-
     setVoiceEnabled(enabled) {
         this.voice.setEnabled(enabled);
     }

@@ -274,18 +274,9 @@ class Game {
         if (apiBaseUrl) {
             // Using backend proxy - no API key needed on frontend
             this.aiAgent.setApiKey('proxy'); // Just a flag to enable API calls
-            // Voice synthesis also works via proxy
-            this.aiAgent.setVoiceApiKey('proxy');
-            this.aiAgent.setVoiceEnabled(true);
         } else if (apiKey) {
             // Direct OpenAI calls - need API key
             this.aiAgent.setApiKey(apiKey);
-            // Load voice settings from environment variables
-            const elevenLabsKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
-            if (elevenLabsKey) {
-                this.aiAgent.setVoiceApiKey(elevenLabsKey);
-                this.aiAgent.setVoiceEnabled(true);
-            }
         }
 
         // Initialize chat interface
@@ -417,18 +408,9 @@ class Game {
             if (apiBaseUrl) {
                 // Using backend proxy - no API key needed on frontend
                 this.aiAgent.setApiKey('proxy');
-                // Voice synthesis also works via proxy
-                this.aiAgent.setVoiceApiKey('proxy');
-                this.aiAgent.setVoiceEnabled(true);
             } else if (apiKey) {
                 // Direct OpenAI calls - need API key
                 this.aiAgent.setApiKey(apiKey);
-                // Load voice settings from environment variables
-                const elevenLabsKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
-                if (elevenLabsKey) {
-                    this.aiAgent.setVoiceApiKey(elevenLabsKey);
-                    this.aiAgent.setVoiceEnabled(true);
-                }
             }
 
             // Initialize chat interface
@@ -539,8 +521,8 @@ class Game {
                 }
             });
         } else {
-            // Show unit info
-            this.hud?.showSelection(entity);
+            // Show unit info - pass full selection for multi-larva support
+            this.hud?.showSelection(entity, selection);
         }
     }
 
@@ -815,8 +797,20 @@ class Game {
 
                 if (distance > 0.3) {
                     const moveSpeed = Math.min(speed * deltaTime, distance);
-                    unit.x += (dx / distance) * moveSpeed;
-                    unit.z += (dz / distance) * moveSpeed;
+                    let newX = unit.x + (dx / distance) * moveSpeed;
+                    let newZ = unit.z + (dz / distance) * moveSpeed;
+
+                    // Check building collision and navigate around if needed
+                    const collision = this.checkBuildingCollisionWithNavigation(
+                        unit.x, unit.z, newX, newZ, unitRadius, dx, dz
+                    );
+                    if (collision) {
+                        newX = collision.x;
+                        newZ = collision.z;
+                    }
+
+                    unit.x = newX;
+                    unit.z = newZ;
                     this.unitRenderer?.updateUnitPosition(unit.id, unit.x, unit.z);
                 } else {
                     // Arrived at destination
@@ -840,12 +834,153 @@ class Game {
                 const sepMag = Math.sqrt(separationX * separationX + separationZ * separationZ);
                 if (sepMag > 0.01) {
                     const moveSpeed = Math.min(speed * 0.5 * deltaTime, sepMag * deltaTime);
-                    unit.x += (separationX / sepMag) * moveSpeed;
-                    unit.z += (separationZ / sepMag) * moveSpeed;
+                    let newX = unit.x + (separationX / sepMag) * moveSpeed;
+                    let newZ = unit.z + (separationZ / sepMag) * moveSpeed;
+
+                    // Check building collision (simple push for separation)
+                    const collision = this.checkBuildingCollision(newX, newZ, unitRadius);
+                    if (collision) {
+                        newX = collision.x;
+                        newZ = collision.z;
+                    }
+
+                    unit.x = newX;
+                    unit.z = newZ;
                     this.unitRenderer?.updateUnitPosition(unit.id, unit.x, unit.z);
                 }
             }
         });
+    }
+
+    // Check if position collides with any building and return adjusted position
+    // Uses rectangular AABB collision based on actual building sizes
+    checkBuildingCollision(x, z, unitRadius) {
+        for (const building of gameState.buildings) {
+            // Building size based on type (matches BuildingRenderer hitbox sizes)
+            // Gas extractors have no collision so workers can enter to harvest
+            const gasTypes = ['gasextractor', 'extractor', 'refinery', 'assimilator'];
+            const isGasExtractor = gasTypes.includes(building.type?.toLowerCase());
+            if (isGasExtractor) continue; // Skip collision for gas extractors
+
+            const halfSize = (building.type === 'base' || building.type === 'hatchery') ? 3 : 2.5;
+
+            // Building bounds (AABB)
+            const minX = building.x - halfSize;
+            const maxX = building.x + halfSize;
+            const minZ = building.z - halfSize;
+            const maxZ = building.z + halfSize;
+
+            // Expand bounds by unit radius
+            const expandedMinX = minX - unitRadius;
+            const expandedMaxX = maxX + unitRadius;
+            const expandedMinZ = minZ - unitRadius;
+            const expandedMaxZ = maxZ + unitRadius;
+
+            // Check if unit center is inside expanded bounds
+            if (x > expandedMinX && x < expandedMaxX && z > expandedMinZ && z < expandedMaxZ) {
+                // Find nearest edge to push unit to
+                const distToLeft = x - expandedMinX;
+                const distToRight = expandedMaxX - x;
+                const distToTop = z - expandedMinZ;
+                const distToBottom = expandedMaxZ - z;
+
+                const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+
+                let pushX = x;
+                let pushZ = z;
+
+                if (minDist === distToLeft) {
+                    pushX = expandedMinX;
+                } else if (minDist === distToRight) {
+                    pushX = expandedMaxX;
+                } else if (minDist === distToTop) {
+                    pushZ = expandedMinZ;
+                } else {
+                    pushZ = expandedMaxZ;
+                }
+
+                return { x: pushX, z: pushZ };
+            }
+        }
+        return null; // No collision
+    }
+
+    // Check building collision with smart navigation around obstacles
+    // Instead of just pushing away, this steers units around buildings
+    checkBuildingCollisionWithNavigation(oldX, oldZ, newX, newZ, unitRadius, moveDx, moveDz) {
+        for (const building of gameState.buildings) {
+            // Skip gas extractors
+            const gasTypes = ['gasextractor', 'extractor', 'refinery', 'assimilator'];
+            const isGasExtractor = gasTypes.includes(building.type?.toLowerCase());
+            if (isGasExtractor) continue;
+
+            const halfSize = (building.type === 'base' || building.type === 'hatchery') ? 3 : 2.5;
+            const expandedSize = halfSize + unitRadius;
+
+            // Building center
+            const bx = building.x;
+            const bz = building.z;
+
+            // Check if new position would be inside building
+            if (newX > bx - expandedSize && newX < bx + expandedSize &&
+                newZ > bz - expandedSize && newZ < bz + expandedSize) {
+
+                // Determine which way to steer around the building
+                // Use cross product to decide: if (dx, dz) x (bx-oldX, bz-oldZ) > 0, go right, else go left
+                const toBuildingX = bx - oldX;
+                const toBuildingZ = bz - oldZ;
+
+                // Cross product: moveDx * toBuildingZ - moveDz * toBuildingX
+                const cross = moveDx * toBuildingZ - moveDz * toBuildingX;
+
+                // Perpendicular direction (90 degrees from movement)
+                // If cross > 0, building is to our left, so steer right
+                // If cross < 0, building is to our right, so steer left
+                let perpX, perpZ;
+                if (cross > 0) {
+                    // Steer right (rotate movement 90 degrees clockwise)
+                    perpX = moveDz;
+                    perpZ = -moveDx;
+                } else {
+                    // Steer left (rotate movement 90 degrees counter-clockwise)
+                    perpX = -moveDz;
+                    perpZ = moveDx;
+                }
+
+                // Normalize perpendicular direction
+                const perpMag = Math.sqrt(perpX * perpX + perpZ * perpZ);
+                if (perpMag > 0.01) {
+                    perpX /= perpMag;
+                    perpZ /= perpMag;
+                }
+
+                // Move along the building edge (slide along)
+                const slideSpeed = Math.sqrt((newX - oldX) ** 2 + (newZ - oldZ) ** 2);
+                let slideX = oldX + perpX * slideSpeed;
+                let slideZ = oldZ + perpZ * slideSpeed;
+
+                // Make sure the slide position is outside the building
+                // Clamp to building edge
+                if (slideX > bx - expandedSize && slideX < bx + expandedSize &&
+                    slideZ > bz - expandedSize && slideZ < bz + expandedSize) {
+                    // Still inside, push to nearest edge
+                    const distToLeft = slideX - (bx - expandedSize);
+                    const distToRight = (bx + expandedSize) - slideX;
+                    const distToTop = slideZ - (bz - expandedSize);
+                    const distToBottom = (bz + expandedSize) - slideZ;
+
+                    const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+
+                    if (minDist === distToLeft) slideX = bx - expandedSize;
+                    else if (minDist === distToRight) slideX = bx + expandedSize;
+                    else if (minDist === distToTop) slideZ = bz - expandedSize;
+                    else slideZ = bz + expandedSize;
+                }
+
+                return { x: slideX, z: slideZ };
+            }
+        }
+        return null; // No collision
     }
 
     getWorkerIndexAtResource(workerId, resourceId, resourceType) {

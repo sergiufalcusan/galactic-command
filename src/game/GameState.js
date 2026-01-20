@@ -267,7 +267,12 @@ class GameState {
             this.mineralWorkers = this.mineralWorkers.filter(id => id !== unitId);
             this.gasWorkers = this.gasWorkers.filter(id => id !== unitId);
 
-            this.population -= 1;
+            // Only decrement population for units that cost population
+            // Larva and eggs don't consume population
+            if (unit.type !== 'larva' && unit.type !== 'egg') {
+                this.population -= 1;
+            }
+
             this.emit('unitRemoved', unit);
             return unit;
         }
@@ -364,7 +369,7 @@ class GameState {
         const gasRate = 20; // gas per second when gathering
         const gatherRange = 2.5; // Must be within this distance to gather
         const cargoCapacity = 50; // Amount worker can carry
-        const depositRange = 5; // Distance to base to deposit
+        const depositRange = 6; // Distance to base to deposit (slightly larger than collision box)
 
         // Mineral gathering
         this.mineralWorkers.forEach(workerId => {

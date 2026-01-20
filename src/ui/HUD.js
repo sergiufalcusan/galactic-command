@@ -100,7 +100,7 @@ export class HUD {
         }
     }
 
-    showSelection(entity) {
+    showSelection(entity, fullSelection = null) {
         // Hide production queue when selecting non-building
         this.selectedBuildingId = null;
         this.hideProductionQueue();
@@ -121,9 +121,13 @@ export class HUD {
             this.addActionButton('🔥', 'Gas', () => gameState.assignWorkerToGas(entity.id));
         }
 
-        // Larva evolution options (Zerg only)
+        // Larva evolution options (Zerg only) - support multi-selection
         if (entity.type === 'larva' && gameState.faction?.id === 'zerg') {
-            this.showLarvaEvolutionOptions(entity);
+            // Filter to only larva from the full selection
+            const selectedLarva = fullSelection
+                ? fullSelection.filter(u => u.type === 'larva')
+                : [entity];
+            this.showLarvaEvolutionOptions(selectedLarva);
         }
 
         // Evolution egg - show progress
@@ -163,13 +167,42 @@ export class HUD {
         this.actionButtons.appendChild(evolveInfo);
     }
 
-    // Show evolution options for a selected larva
-    showLarvaEvolutionOptions(larva) {
+    // Show evolution options for selected larva (supports multi-selection)
+    showLarvaEvolutionOptions(larvaOrArray) {
         const faction = gameState.faction;
         if (!faction) return;
 
+        // Support both single larva and array of larva
+        const larvaList = Array.isArray(larvaOrArray) ? larvaOrArray : [larvaOrArray];
+
+        // Filter to only valid larva that still exist
+        this.selectedLarvaList = larvaList.filter(l =>
+            gameState.units.find(u => u.id === l.id && u.type === 'larva')
+        );
+
+        if (this.selectedLarvaList.length === 0) {
+            this.actionButtons.innerHTML = '<div style="color: #888; padding: 8px;">No larva selected</div>';
+            return;
+        }
+
+        // Initialize or validate current index
+        if (this.selectedLarvaIndex === undefined || this.selectedLarvaIndex >= this.selectedLarvaList.length) {
+            this.selectedLarvaIndex = 0;
+        }
+
+        const currentLarva = this.selectedLarvaList[this.selectedLarvaIndex];
+
         const larvaConfig = faction.units.larva;
         if (!larvaConfig?.canEvolveInto) return;
+
+        // Show larva counter if multiple selected
+        if (this.selectedLarvaList.length > 1) {
+            const counter = document.createElement('div');
+            counter.className = 'larva-counter';
+            counter.style.cssText = 'color: #8b00ff; font-size: 0.85rem; padding: 4px; text-align: center; margin-bottom: 8px;';
+            counter.textContent = `Larva ${this.selectedLarvaIndex + 1}/${this.selectedLarvaList.length}`;
+            this.actionButtons.appendChild(counter);
+        }
 
         // Build list of available evolutions
         const evolutions = [];
@@ -209,22 +242,39 @@ export class HUD {
         evolutions.forEach(evo => {
             const cost = evo.config.cost;
             const costText = `${cost.minerals}m${cost.gas > 0 ? ` ${cost.gas}g` : ''}`;
-            const canAfford = gameState.canAfford(cost);
 
             const btn = document.createElement('button');
-            btn.className = 'action-btn evolution-btn' + (canAfford ? '' : ' disabled');
+            btn.className = 'action-btn evolution-btn';
             btn.innerHTML = evo.icon;
             btn.title = `Evolve to ${evo.config.name} (${costText})`;
             btn.addEventListener('click', () => {
-                if (canAfford) {
-                    const result = gameState.evolveLarva(larva.id, evo.type);
-                    if (result.success) {
-                        this.showNotification(`Evolving to ${evo.config.name}...`);
+                // Check affordability at CLICK time, not selection time
+                if (!gameState.canAfford(cost)) {
+                    this.showNotification('Not enough resources!');
+                    return;
+                }
+
+                const result = gameState.evolveLarva(currentLarva.id, evo.type);
+                if (result.success) {
+                    this.showNotification(`Evolving to ${evo.config.name}...`);
+
+                    // Move to next larva in selection
+                    this.selectedLarvaList = this.selectedLarvaList.filter(l => l.id !== currentLarva.id);
+                    if (this.selectedLarvaList.length > 0) {
+                        // Keep same index (which now points to next larva) or wrap
+                        if (this.selectedLarvaIndex >= this.selectedLarvaList.length) {
+                            this.selectedLarvaIndex = 0;
+                        }
+                        // Refresh UI with remaining larva
+                        this.actionButtons.innerHTML = '';
+                        this.showLarvaEvolutionOptions(this.selectedLarvaList);
                     } else {
-                        this.showNotification(result.error || 'Cannot evolve');
+                        // No more larva, clear selection
+                        this.actionButtons.innerHTML = '';
+                        this.selectedInfo.querySelector('.selected-name').textContent = 'Nothing selected';
                     }
                 } else {
-                    this.showNotification('Not enough resources!');
+                    this.showNotification(result.error || 'Cannot evolve');
                 }
             });
             this.actionButtons.appendChild(btn);
@@ -263,16 +313,105 @@ export class HUD {
 
         // Base buildings can train workers (except Zerg which uses larva)
         if (buildingType === 'base' || buildingType === 'hatchery') {
-            // Zerg Hatchery uses larva system - no direct unit production
+            // Zerg Hatchery - show production options that consume larva
             if (faction.id === 'zerg') {
-                // Show larva info instead of production buttons
                 if (building.isComplete) {
+                    const larvaIds = gameState.getLarvaForHatchery(building.id) || [];
+                    const larvaCount = larvaIds.length;
+
+                    // Show larva count
                     const larvaInfo = document.createElement('div');
                     larvaInfo.className = 'larva-info';
-                    larvaInfo.style.cssText = 'color: #8b00ff; font-size: 0.85rem; padding: 8px; text-align: center;';
-                    const larvaCount = gameState.getLarvaForHatchery(building.id)?.length || 0;
-                    larvaInfo.textContent = `Larva: ${larvaCount}/3 (click a larva to evolve)`;
+                    larvaInfo.style.cssText = 'color: #8b00ff; font-size: 0.85rem; padding: 4px; text-align: center; margin-bottom: 8px;';
+                    larvaInfo.textContent = `Available Larva: ${larvaCount}/3`;
                     this.actionButtons.appendChild(larvaInfo);
+
+                    // Get units that can be evolved from larva
+                    const larvaConfig = faction.units.larva;
+                    if (larvaConfig?.canEvolveInto) {
+                        larvaConfig.canEvolveInto.forEach(unitType => {
+                            let unitConfig, unitName;
+                            if (unitType === 'drone') {
+                                unitConfig = faction.worker;
+                                unitName = 'Drone';
+                            } else if (unitType === 'overlord') {
+                                unitConfig = faction.supplyUnit;
+                                unitName = 'Overlord';
+                            } else {
+                                unitConfig = faction.units[unitType];
+                                unitName = unitConfig?.name || unitType;
+                            }
+
+                            if (!unitConfig) return;
+
+                            const canAfford = gameState.canAfford(unitConfig.cost);
+                            const hasLarva = larvaCount > 0;
+                            const hasSupply = unitType === 'overlord' || gameState.canAddPopulation(unitConfig.population || 1);
+
+                            // Check tech requirements
+                            let hasTech = true;
+                            if (unitConfig.requiresBuilding) {
+                                hasTech = gameState.buildings.some(b =>
+                                    b.type === unitConfig.requiresBuilding && b.isComplete
+                                );
+                            }
+
+                            const enabled = canAfford && hasLarva && hasSupply && hasTech;
+
+                            const btn = document.createElement('button');
+                            btn.className = 'action-btn';
+                            btn.disabled = !enabled;
+                            btn.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 60px; padding: 6px;';
+                            btn.style.opacity = enabled ? '1' : '0.5';
+
+                            const cost = unitConfig.cost;
+                            let costText = `${cost.minerals}m`;
+                            if (cost.gas > 0) costText += ` ${cost.gas}g`;
+
+                            // Create structured content
+                            const iconSpan = document.createElement('span');
+                            iconSpan.style.fontSize = '1.5rem';
+                            iconSpan.textContent = this.getUnitIcon(unitType);
+
+                            const nameSpan = document.createElement('span');
+                            nameSpan.style.cssText = 'font-size: 0.65rem; white-space: nowrap;';
+                            nameSpan.textContent = unitName;
+
+                            const costSpan = document.createElement('span');
+                            costSpan.style.cssText = 'font-size: 0.6rem; color: #aaa;';
+                            costSpan.textContent = costText;
+
+                            btn.appendChild(iconSpan);
+                            btn.appendChild(nameSpan);
+                            btn.appendChild(costSpan);
+
+                            btn.onclick = () => {
+                                // Re-check larva at click time
+                                const currentLarvaIds = gameState.getLarvaForHatchery(building.id) || [];
+                                if (currentLarvaIds.length === 0) {
+                                    this.showNotification('No larva available!', 'error');
+                                    return;
+                                }
+                                // Re-check affordability at click time
+                                if (!gameState.canAfford(unitConfig.cost)) {
+                                    this.showNotification('Not enough resources!', 'error');
+                                    return;
+                                }
+                                // Pick a larva and evolve it
+                                const larvaId = currentLarvaIds[0];
+                                const result = gameState.evolveLarva(larvaId, unitType);
+                                if (result.success) {
+                                    this.showNotification(`Evolving ${unitName}...`);
+                                    // Refresh the building selection to update larva count
+                                    this.showBuildingSelection(building, onTrainUnit);
+                                } else {
+                                    this.showNotification(result.error, 'error');
+                                }
+                            };
+
+                            this.actionButtons.appendChild(btn);
+                        });
+                    }
                 }
             } else {
                 trainableUnits.push({

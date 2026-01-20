@@ -227,10 +227,13 @@ export class UnitRenderer {
         hitbox.userData.unitData = unitData;
         group.add(hitbox);
 
-        // Selection ring
+        // Selection ring - higher position and bigger for larva
         const selectionRing = this.createSelectionRing();
         selectionRing.visible = false;
-        selectionRing.scale.setScalar(0.6); // Smaller ring for larva
+        selectionRing.scale.setScalar(1.0); // Normal size for visibility
+        selectionRing.position.y = 0.15; // Raise above terrain
+        selectionRing.material.depthTest = false; // Render on top of terrain
+        selectionRing.renderOrder = 999; // Ensure it renders last
         group.add(selectionRing);
         group.userData.selectionRing = selectionRing;
 
@@ -502,7 +505,7 @@ export class UnitRenderer {
                 }
 
                 // Movement speed
-                const moveSpeed = 2.0;
+                const moveSpeed = 1.0;
                 const dx = Math.cos(group.userData.wanderAngle) * moveSpeed * 0.016;
                 const dz = Math.sin(group.userData.wanderAngle) * moveSpeed * 0.016;
                 group.position.x += dx;

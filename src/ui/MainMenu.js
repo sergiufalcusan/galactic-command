@@ -43,30 +43,24 @@ export class MainMenu {
   }
 
   showSettings() {
-    // Settings modal (API keys moved to .env file)
+    // Settings modal - simplified, keys are stored in backend
     const modal = document.createElement('div');
     modal.className = 'settings-modal';
 
-    const hasOpenAI = !!import.meta.env.VITE_OPENAI_API_KEY;
-    const hasElevenLabs = !!import.meta.env.VITE_ELEVENLABS_API_KEY;
+    // Get current voice setting from localStorage (default to true)
+    const voiceEnabled = localStorage.getItem('voiceEnabled') !== 'false';
 
     modal.innerHTML = `
       <div class="settings-content">
         <h3>Settings</h3>
         
         <div class="settings-group">
-          <h4>API Configuration</h4>
-          <p class="settings-hint">API keys are now configured via the <code>.env</code> file in the project root.</p>
-          <p class="settings-hint">Copy <code>.env.example</code> to <code>.env</code> and add your keys.</p>
-        </div>
-        
-        <div class="settings-group">
-          <p class="settings-status">
-            OpenAI API: <span class="${hasOpenAI ? 'status-ok' : 'status-missing'}">${hasOpenAI ? '✓ Configured' : '✗ Not configured'}</span>
-          </p>
-          <p class="settings-status">
-            ElevenLabs Voice: <span class="${hasElevenLabs ? 'status-ok' : 'status-missing'}">${hasElevenLabs ? '✓ Configured' : '✗ Not configured'}</span>
-          </p>
+          <h4>Voice Settings</h4>
+          <label class="settings-toggle">
+            <input type="checkbox" id="voice-toggle" ${voiceEnabled ? 'checked' : ''}>
+            <span>Enable AI Voice (ElevenLabs)</span>
+          </label>
+          <p class="settings-hint">Enable or disable AI voice synthesis for advisor feedback.</p>
         </div>
         
         <div class="settings-actions">
@@ -117,26 +111,26 @@ export class MainMenu {
           color: var(--text-muted);
           margin-top: 8px;
         }
-        .settings-hint code {
-          background: var(--bg-darker);
-          padding: 2px 6px;
-          border-radius: 3px;
-          color: var(--accent-primary);
-        }
-        .settings-status {
-          margin: 8px 0;
-          color: var(--text-secondary);
-        }
-        .status-ok {
-          color: #00ff00;
-        }
-        .status-missing {
-          color: #ff6600;
-        }
         .settings-actions {
           display: flex;
           gap: 12px;
           justify-content: flex-end;
+        }
+        .settings-toggle {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          cursor: pointer;
+          color: var(--text-primary);
+        }
+        .settings-toggle input {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+        }
+        .settings-toggle input:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
       `;
       document.head.appendChild(style);
@@ -148,6 +142,18 @@ export class MainMenu {
     modal.querySelector('#settings-close').addEventListener('click', () => {
       modal.remove();
     });
+
+    // Voice toggle listener
+    const voiceToggle = modal.querySelector('#voice-toggle');
+    if (voiceToggle) {
+      voiceToggle.addEventListener('change', (e) => {
+        localStorage.setItem('voiceEnabled', e.target.checked ? 'true' : 'false');
+        // Dispatch event for game to react
+        window.dispatchEvent(new CustomEvent('voiceSettingChanged', {
+          detail: { enabled: e.target.checked }
+        }));
+      });
+    }
 
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {

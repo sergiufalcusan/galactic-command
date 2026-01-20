@@ -99,6 +99,9 @@ export class TerrainRenderer {
         glow.position.y = 1;
         group.add(glow);
 
+        group.userData.id = data.id;
+        group.userData.type = 'mineral';
+
         this.scene.addObject(data.id, group);
         this.resourceNodes.set(data.id, { group, type: 'mineral', data });
 
@@ -119,27 +122,27 @@ export class TerrainRenderer {
             });
         });
 
-        // Inner glow (gas)
-        const gasGeometry = new THREE.CylinderGeometry(1.5, 1.8, 0.8, 16);
+        // Inner glow (gas) - half size
+        const gasGeometry = new THREE.CylinderGeometry(0.75, 0.9, 0.4, 16);
         const gasMaterial = new THREE.MeshBasicMaterial({
             color: 0x00ff88,
             transparent: true,
             opacity: 0.7
         });
         const gasGlow = new THREE.Mesh(gasGeometry, gasMaterial);
-        gasGlow.position.y = 0.6;
+        gasGlow.position.y = 0.4;
         gasGlow.userData.isGasGlow = true;
         group.add(gasGlow);
 
-        // Simple gas plume
-        const plumeGeometry = new THREE.ConeGeometry(0.8, 3, 8);
+        // Simple gas plume (smaller)
+        const plumeGeometry = new THREE.ConeGeometry(0.4, 1.5, 8);
         const plumeMaterial = new THREE.MeshBasicMaterial({
             color: 0x00ff88,
             transparent: true,
             opacity: 0.3
         });
         const plume = new THREE.Mesh(plumeGeometry, plumeMaterial);
-        plume.position.y = 2.5;
+        plume.position.y = 1.5;
         plume.userData.isPlume = true;
         group.add(plume);
 
@@ -156,6 +159,9 @@ export class TerrainRenderer {
         haze.userData.isExtractionHaze = true;
         haze.visible = false; // Hidden until extractor is built
         group.add(haze);
+
+        group.userData.id = data.id;
+        group.userData.type = 'gas';
 
         this.scene.addObject(data.id, group);
         this.resourceNodes.set(data.id, { group, type: 'gas', data });
