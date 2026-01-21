@@ -4,6 +4,8 @@
  */
 
 import { getFaction } from './Faction.js';
+import { getBuildingDimensions } from './BuildingConfig.js';
+import { getUnitConfig } from './UnitConfig.js';
 
 const STORAGE_KEY = 'galactic_command_save';
 const MAX_POPULATION = 200;
@@ -369,7 +371,6 @@ class GameState {
         const gasRate = 20; // gas per second when gathering
         const gatherRange = 2.5; // Must be within this distance to gather
         const cargoCapacity = 50; // Amount worker can carry
-        const depositRange = 6; // Distance to base to deposit (slightly larger than collision box)
 
         // Mineral gathering
         this.mineralWorkers.forEach(workerId => {
@@ -417,14 +418,22 @@ class GameState {
                 if (base) {
                     const dx = base.x - worker.x;
                     const dz = base.z - worker.z;
-                    const distance = Math.sqrt(dx * dx + dz * dz);
+                    const dims = getBuildingDimensions(base.type);
+                    if (dims) {
+                        // Use collision box as deposit range
+                        // A worker can deposit if they are at the edge of the collision box (+ margin)
+                        const halfW = dims.collisionWidth / 2;
+                        const halfD = dims.collisionDepth / 2;
+                        const unitConfig = getUnitConfig(worker.type);
+                        const margin = (unitConfig?.radius || 0.8) + 0.5; // allowance for unit radius + small buffer
 
-                    if (distance <= depositRange) {
-                        // Deposit minerals
-                        this.minerals += worker.carriedMinerals;
-                        worker.carriedMinerals = 0;
-                        worker.state = 'mining'; // Go back to mining
-                        this.emit('workerDeposited', { worker, resourceType: 'minerals' });
+                        if (Math.abs(dx) <= halfW + margin && Math.abs(dz) <= halfD + margin) {
+                            // Deposit minerals
+                            this.minerals += worker.carriedMinerals;
+                            worker.carriedMinerals = 0;
+                            worker.state = 'mining'; // Go back to mining
+                            this.emit('workerDeposited', { worker, resourceType: 'minerals' });
+                        }
                     }
                 }
             }
@@ -504,14 +513,20 @@ class GameState {
                 if (base) {
                     const dx = base.x - worker.x;
                     const dz = base.z - worker.z;
-                    const distance = Math.sqrt(dx * dx + dz * dz);
+                    const dims = getBuildingDimensions(base.type);
+                    if (dims) {
+                        const halfW = dims.collisionWidth / 2;
+                        const halfD = dims.collisionDepth / 2;
+                        const unitConfig = getUnitConfig(worker.type);
+                        const margin = (unitConfig?.radius || 0.8) + 0.5; // allowance for unit radius + small buffer
 
-                    if (distance <= depositRange) {
-                        // Deposit gas
-                        this.gas += worker.carriedGas;
-                        worker.carriedGas = 0;
-                        worker.state = 'harvesting_gas'; // Go back to harvesting
-                        this.emit('workerDeposited', { worker, resourceType: 'gas' });
+                        if (Math.abs(dx) <= halfW + margin && Math.abs(dz) <= halfD + margin) {
+                            // Deposit gas
+                            this.gas += worker.carriedGas;
+                            worker.carriedGas = 0;
+                            worker.state = 'harvesting_gas'; // Go back to harvesting
+                            this.emit('workerDeposited', { worker, resourceType: 'gas' });
+                        }
                     }
                 }
             }

@@ -22,6 +22,9 @@ export class HUD {
         this.queueItems = document.getElementById('queue-items');
         this.selectedBuildingId = null;
 
+        // Callbacks for external handlers
+        this.onBuildMenu = null; // Callback to open building menu (like 'B' key)
+
         this.init();
     }
 
@@ -119,6 +122,11 @@ export class HUD {
         if (entity.type === 'worker') {
             this.addActionButton('⛏️', 'Mine', () => gameState.assignWorkerToMinerals(entity.id));
             this.addActionButton('🔥', 'Gas', () => gameState.assignWorkerToGas(entity.id));
+            this.addActionButton('🏗️', 'Build (B)', () => {
+                if (this.onBuildMenu) {
+                    this.onBuildMenu();
+                }
+            });
         }
 
         // Larva evolution options (Zerg only) - support multi-selection
@@ -715,6 +723,8 @@ export class HUD {
         <h3>Game Menu</h3>
         <button id="ingame-resume" class="menu-btn primary">Resume</button>
         <button id="ingame-save" class="menu-btn secondary">Save Game</button>
+        <button id="ingame-settings" class="menu-btn secondary">Settings</button>
+        <button id="ingame-how-to-play" class="menu-btn secondary">How to Play</button>
         <button id="ingame-quit" class="menu-btn tertiary">Quit to Menu</button>
       </div>
     `;
@@ -770,6 +780,16 @@ export class HUD {
             this.closeInGameMenu();
         });
 
+        this.menuModal.querySelector('#ingame-settings').addEventListener('click', () => {
+            this.closeInGameMenu();
+            this.showInGameSettings();
+        });
+
+        this.menuModal.querySelector('#ingame-how-to-play').addEventListener('click', () => {
+            this.closeInGameMenu();
+            this.showInGameHowToPlay();
+        });
+
         this.menuModal.querySelector('#ingame-quit').addEventListener('click', () => {
             this.closeInGameMenu();
             // Dispatch custom event for main.js to handle
@@ -779,6 +799,323 @@ export class HUD {
         this.menuModal.addEventListener('click', (e) => {
             if (e.target === this.menuModal) {
                 this.closeInGameMenu();
+            }
+        });
+    }
+
+    showInGameSettings() {
+        const modal = document.createElement('div');
+        modal.className = 'ingame-settings-modal';
+
+        const voiceEnabled = localStorage.getItem('voiceEnabled') !== 'false';
+
+        modal.innerHTML = `
+      <div class="ingame-settings-content">
+        <h3>Settings</h3>
+        
+        <div class="ingame-settings-group">
+          <h4>Voice Settings</h4>
+          <label class="ingame-settings-toggle">
+            <input type="checkbox" id="ingame-voice-toggle" ${voiceEnabled ? 'checked' : ''}>
+            <span>Enable AI Voice (ElevenLabs)</span>
+          </label>
+          <p class="ingame-settings-hint">Enable or disable AI voice synthesis for advisor feedback.</p>
+        </div>
+        
+        <div class="ingame-settings-actions">
+          <button id="ingame-settings-close" class="menu-btn primary">Close</button>
+        </div>
+      </div>
+    `;
+
+        // Add styles
+        if (!document.querySelector('#ingame-settings-styles')) {
+            const style = document.createElement('style');
+            style.id = 'ingame-settings-styles';
+            style.textContent = `
+        .ingame-settings-modal {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1001;
+        }
+        .ingame-settings-content {
+          background: var(--bg-panel);
+          border: 1px solid var(--border-color);
+          border-radius: 12px;
+          padding: 24px;
+          width: 400px;
+          max-width: 90%;
+        }
+        .ingame-settings-content h3 {
+          font-family: var(--font-display);
+          margin-bottom: 20px;
+          color: var(--accent-primary);
+        }
+        .ingame-settings-content h4 {
+          margin-bottom: 10px;
+          color: var(--text-primary);
+        }
+        .ingame-settings-group {
+          margin-bottom: 20px;
+        }
+        .ingame-settings-hint {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          margin-top: 8px;
+        }
+        .ingame-settings-actions {
+          display: flex;
+          gap: 12px;
+          justify-content: flex-end;
+        }
+        .ingame-settings-toggle {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          cursor: pointer;
+          color: var(--text-primary);
+        }
+        .ingame-settings-toggle input {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+        }
+      `;
+            document.head.appendChild(style);
+        }
+
+        document.body.appendChild(modal);
+
+        modal.querySelector('#ingame-settings-close').addEventListener('click', () => {
+            modal.remove();
+        });
+
+        const voiceToggle = modal.querySelector('#ingame-voice-toggle');
+        if (voiceToggle) {
+            voiceToggle.addEventListener('change', (e) => {
+                localStorage.setItem('voiceEnabled', e.target.checked ? 'true' : 'false');
+                window.dispatchEvent(new CustomEvent('voiceSettingChanged', {
+                    detail: { enabled: e.target.checked }
+                }));
+            });
+        }
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    }
+
+    showInGameHowToPlay() {
+        const modal = document.createElement('div');
+        modal.className = 'ingame-htp-modal';
+        modal.innerHTML = `
+      <div class="ingame-htp-content">
+        <h3>❓ How to Play</h3>
+        
+        <div class="ingame-htp-columns">
+          <div class="ingame-htp-column ingame-htp-left">
+            <div class="ingame-htp-section">
+              <h4>🎮 Controls</h4>
+              <table class="ingame-htp-table">
+                <tr><td><kbd>Left Click</kbd></td><td>Select units/buildings</td></tr>
+                <tr><td><kbd>Right Click</kbd></td><td>Move / Gather resources</td></tr>
+                <tr><td><kbd>Shift + Drag</kbd></td><td>Rotate camera</td></tr>
+                <tr><td><kbd>B</kbd></td><td>Open building menu</td></tr>
+                <tr><td><kbd>1-9</kbd></td><td>Building hotkeys</td></tr>
+                <tr><td><kbd>Esc</kbd></td><td>Cancel / Close menus</td></tr>
+              </table>
+            </div>
+            
+            <div class="ingame-htp-section">
+              <h4>⚡ Quick Tips</h4>
+              <ul class="ingame-htp-tips">
+                <li>Build workers early for faster income</li>
+                <li>Expand supply to train more units</li>
+                <li>Zerg: Evolve larva into units</li>
+                <li>Right-click minerals to mine</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div class="ingame-htp-column ingame-htp-right">
+            <div class="ingame-htp-section">
+              <h4>🤖 AI Advisor</h4>
+              <p class="ingame-htp-hint">Your faction has an AI advisor that watches the game and provides strategic guidance. It will comment on your actions and offer suggestions!</p>
+            </div>
+            
+            <div class="ingame-htp-section">
+              <h4>💬 Chat Prompts</h4>
+              <p class="ingame-htp-hint">Type in the chat box to ask your advisor:</p>
+              <ul class="ingame-htp-prompts">
+                <li><em>"What should I build next?"</em></li>
+                <li><em>"How do I get more supply?"</em></li>
+                <li><em>"Explain Zerg strategy"</em></li>
+                <li><em>"What units counter marines?"</em></li>
+                <li><em>"Help me improve my economy"</em></li>
+                <li><em>"When should I attack?"</em></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        
+        <div class="ingame-htp-actions">
+          <button id="ingame-htp-close" class="menu-btn primary">Got it!</button>
+        </div>
+      </div>
+    `;
+
+        // Add styles
+        const existingStyle = document.querySelector('#ingame-htp-styles');
+        if (existingStyle) existingStyle.remove();
+
+        const style = document.createElement('style');
+        style.id = 'ingame-htp-styles';
+        style.textContent = `
+      .ingame-htp-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1001;
+      }
+      .ingame-htp-content {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 24px;
+        width: 750px;
+        max-width: 90vw;
+        max-height: 85vh;
+        overflow-y: auto;
+      }
+      .ingame-htp-content h3 {
+        font-family: var(--font-display);
+        text-align: center;
+        margin-bottom: 20px;
+        color: var(--accent-primary);
+      }
+      .ingame-htp-content h4 {
+        color: var(--accent-primary);
+        margin-bottom: 12px;
+        font-size: 1.1rem;
+        font-family: var(--font-display);
+      }
+      .ingame-htp-columns {
+        display: flex;
+        gap: 30px;
+      }
+      .ingame-htp-column {
+        flex: 1;
+        min-width: 0;
+      }
+      .ingame-htp-left {
+        border-right: 1px solid var(--border-color);
+        padding-right: 25px;
+      }
+      .ingame-htp-right {
+        padding-left: 5px;
+      }
+      .ingame-htp-section {
+        margin-bottom: 20px;
+      }
+      .ingame-htp-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .ingame-htp-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border-color);
+        font-size: 0.9rem;
+      }
+      .ingame-htp-table td:first-child {
+        width: 45%;
+        color: var(--accent-secondary);
+      }
+      .ingame-htp-table kbd {
+        background: var(--bg-darker);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 3px 8px;
+        font-family: monospace;
+        font-size: 0.85rem;
+        color: var(--text-primary);
+      }
+      .ingame-htp-hint {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-bottom: 12px;
+        line-height: 1.5;
+      }
+      .ingame-htp-prompts {
+        list-style: none;
+        padding: 0;
+      }
+      .ingame-htp-prompts li {
+        padding: 6px 0;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+      }
+      .ingame-htp-prompts em {
+        color: var(--accent-secondary);
+        font-style: normal;
+        background: var(--bg-darker);
+        padding: 2px 8px;
+        border-radius: 4px;
+      }
+      .ingame-htp-tips {
+        padding-left: 20px;
+        color: var(--text-primary);
+      }
+      .ingame-htp-tips li {
+        padding: 5px 0;
+        font-size: 0.9rem;
+      }
+      .ingame-htp-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 20px;
+      }
+      @media (max-width: 700px) {
+        .ingame-htp-columns {
+          flex-direction: column;
+        }
+        .ingame-htp-left {
+          border-right: none;
+          border-bottom: 1px solid var(--border-color);
+          padding-right: 0;
+          padding-bottom: 20px;
+        }
+        .ingame-htp-right {
+          padding-left: 0;
+        }
+      }
+    `;
+        document.head.appendChild(style);
+
+        document.body.appendChild(modal);
+
+        modal.querySelector('#ingame-htp-close').addEventListener('click', () => {
+            modal.remove();
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
             }
         });
     }

@@ -10,6 +10,8 @@ import UnitRenderer from './rendering/UnitRenderer.js';
 import BuildingRenderer from './rendering/BuildingRenderer.js';
 import AIAgent from './ai/Agent.js';
 import GameActions from './game/GameActions.js';
+import { getBuildingDimensions } from './game/BuildingConfig.js';
+import { getUnitConfig } from './game/UnitConfig.js';
 import InputHandler from './game/InputHandler.js';
 import MainMenu from './ui/MainMenu.js';
 import FactionSelect from './ui/FactionSelect.js';
@@ -24,6 +26,7 @@ class Game {
         this.terrainRenderer = null;
         this.unitRenderer = null;
         this.buildingRenderer = null;
+        this.debugMode = false;
 
         // UI
         this.mainMenu = null;
@@ -99,6 +102,12 @@ class Game {
 
             // Priority 3: Toggle In-Game Menu
             this.hud?.toggleInGameMenu();
+            return;
+        }
+
+        // F10 - Toggle Debug Mode
+        if (e.key === 'F10') {
+            this.toggleDebugMode();
             return;
         }
 
@@ -285,6 +294,7 @@ class Game {
 
         // Initialize HUD
         this.hud = new HUD();
+        this.hud.onBuildMenu = () => this.toggleBuildingMenu();
 
         // Initialize input handler for mouse controls
         this.inputHandler = new InputHandler(
@@ -419,6 +429,7 @@ class Game {
 
             // Initialize HUD
             this.hud = new HUD();
+            this.hud.onBuildMenu = () => this.toggleBuildingMenu();
 
             // Initialize input handler for mouse controls
             this.inputHandler = new InputHandler(
@@ -698,9 +709,7 @@ class Game {
 
     updateUnitPositions(deltaTime) {
         const speed = 5;
-        const unitRadius = 1.5; // Collision radius (increased from 1.0)
         const separationForce = 4.0; // Stronger separation force
-        const minSeparation = unitRadius * 1.5; // Minimum distance between units
 
         gameState.units.forEach((unit, index) => {
             let targetX = null;
@@ -756,6 +765,29 @@ class Game {
                         targetZ = unit.targetZ;
                     }
                 }
+            } else if (unit.type === 'larva') {
+                // Larva wandering logic
+                if (unit.targetX === undefined || unit.targetZ === undefined || unit.wanderTimer === undefined) {
+                    unit.wanderTimer = 0;
+                    unit.baseX = unit.x;
+                    unit.baseZ = unit.z;
+                    unit.targetX = unit.x + (Math.random() - 0.5) * 6;
+                    unit.targetZ = unit.z + (Math.random() - 0.5) * 6;
+                }
+
+                unit.wanderTimer += deltaTime;
+
+                // Pick a new target periodically or if we've arrived
+                const distToTargetSq = (unit.targetX - unit.x) ** 2 + (unit.targetZ - unit.z) ** 2;
+                if (unit.wanderTimer > 3.0 || distToTargetSq < 0.1) {
+                    unit.wanderTimer = 0;
+                    // Wander around base position
+                    unit.targetX = unit.baseX + (Math.random() - 0.5) * 8;
+                    unit.targetZ = unit.baseZ + (Math.random() - 0.5) * 8;
+                }
+
+                targetX = unit.targetX;
+                targetZ = unit.targetZ;
             }
 
             // All units can move when in 'moving' state
@@ -764,54 +796,53 @@ class Game {
                 targetZ = unit.targetZ;
             }
 
-            // Calculate separation from nearby units (applies to ALL units, even idle ones)
-            let separationX = 0;
-            let separationZ = 0;
-            let needsSeparation = false;
+            // Base speed for units
+            let unitSpeed = speed;
+            const config = getUnitConfig(unit.type);
+            const unitRadius = config.radius;
 
-            gameState.units.forEach(other => {
-                if (other.id === unit.id) return;
-                const sepX = unit.x - other.x;
-                const sepZ = unit.z - other.z;
-                const sepDist = Math.sqrt(sepX * sepX + sepZ * sepZ);
+            let newX = unit.x;
+            let newZ = unit.z;
 
-                // Apply separation if units are too close
-                if (sepDist < minSeparation && sepDist > 0.01) {
-                    const strength = (minSeparation - sepDist) / minSeparation; // Stronger when closer
-                    separationX += (sepX / sepDist) * separationForce * strength;
-                    separationZ += (sepZ / sepDist) * separationForce * strength;
-                    needsSeparation = true;
+            // Unit-unit separation and collision
+            gameState.units.forEach((other, otherIndex) => {
+                if (index === otherIndex) return;
+
+                const dx = unit.x - other.x;
+                const dz = unit.z - other.z;
+                const distSq = dx * dx + dz * dz;
+                const otherConfig = getUnitConfig(other.type);
+                const minSeparation = (unitRadius + otherConfig.radius) * 1.2;
+
+                if (distSq < minSeparation * minSeparation) {
+                    const dist = Math.sqrt(distSq);
+                    const pushForce = (minSeparation - dist) * separationForce;
+                    const angle = distSq > 0 ? Math.atan2(dz, dx) : Math.random() * Math.PI * 2;
+                    newX += Math.cos(angle) * pushForce * deltaTime;
+                    newZ += Math.sin(angle) * pushForce * deltaTime;
                 }
             });
 
-            // Move towards target if one exists
+            // Actual movement towards target
             if (targetX !== null && targetZ !== null) {
-                let dx = targetX - unit.x;
-                let dz = targetZ - unit.z;
+                const dx = targetX - unit.x;
+                const dz = targetZ - unit.z;
+                const distSq = dx * dx + dz * dz;
 
-                // Add separation to movement direction
-                dx += separationX * deltaTime;
-                dz += separationZ * deltaTime;
+                if (distSq > 0.01) {
+                    const dist = Math.sqrt(distSq);
+                    const force = Math.min(dist, unitSpeed * deltaTime);
+                    newX += (dx / dist) * force;
+                    newZ += (dz / dist) * force;
 
-                const distance = Math.sqrt(dx * dx + dz * dz);
-
-                if (distance > 0.3) {
-                    const moveSpeed = Math.min(speed * deltaTime, distance);
-                    let newX = unit.x + (dx / distance) * moveSpeed;
-                    let newZ = unit.z + (dz / distance) * moveSpeed;
-
-                    // Check building collision and navigate around if needed
-                    const collision = this.checkBuildingCollisionWithNavigation(
-                        unit.x, unit.z, newX, newZ, unitRadius, dx, dz
+                    // Building collision check with navigation
+                    const navPos = this.checkBuildingCollisionWithNavigation(
+                        unit.x, unit.z, newX, newZ, unitRadius, dx / dist, dz / dist
                     );
-                    if (collision) {
-                        newX = collision.x;
-                        newZ = collision.z;
+                    if (navPos) {
+                        newX = navPos.x;
+                        newZ = navPos.z;
                     }
-
-                    unit.x = newX;
-                    unit.z = newZ;
-                    this.unitRenderer?.updateUnitPosition(unit.id, unit.x, unit.z);
                 } else {
                     // Arrived at destination
                     if (unit.state === 'moving') {
@@ -829,25 +860,29 @@ class Game {
                         // No further action needed here as checkHumanConstruction handles unpausing
                     }
                 }
-            } else if (needsSeparation) {
-                // Apply separation even when idle to push overlapping units apart
-                const sepMag = Math.sqrt(separationX * separationX + separationZ * separationZ);
-                if (sepMag > 0.01) {
-                    const moveSpeed = Math.min(speed * 0.5 * deltaTime, sepMag * deltaTime);
-                    let newX = unit.x + (separationX / sepMag) * moveSpeed;
-                    let newZ = unit.z + (separationZ / sepMag) * moveSpeed;
+            }
 
-                    // Check building collision (simple push for separation)
-                    const collision = this.checkBuildingCollision(newX, newZ, unitRadius);
-                    if (collision) {
-                        newX = collision.x;
-                        newZ = collision.z;
-                    }
-
-                    unit.x = newX;
-                    unit.z = newZ;
-                    this.unitRenderer?.updateUnitPosition(unit.id, unit.x, unit.z);
+            // Always update position even if not moving towards a target (for separation)
+            // But only if we actually moved from separation
+            if (unit.x !== newX || unit.z !== newZ) {
+                // Check building collision (simple push for separation/idle drift)
+                const collision = this.checkBuildingCollision(newX, newZ, unitRadius);
+                if (collision) {
+                    newX = collision.x;
+                    newZ = collision.z;
                 }
+                unit.x = newX;
+                unit.z = newZ;
+
+                // Update unit rotation based on movement direction
+                const group = this.unitRenderer?.units?.get(unit.id);
+                if (group) {
+                    const moveAngle = Math.atan2(newZ - unit.z, newX - unit.x);
+                    // Store base rotation for renderer to use with wiggling
+                    group.userData.baseRotationY = moveAngle;
+                }
+
+                this.unitRenderer?.updateUnitPosition(unit.id, unit.x, unit.z);
             }
         });
     }
@@ -862,13 +897,15 @@ class Game {
             const isGasExtractor = gasTypes.includes(building.type?.toLowerCase());
             if (isGasExtractor) continue; // Skip collision for gas extractors
 
-            const halfSize = (building.type === 'base' || building.type === 'hatchery') ? 3 : 2.5;
+            const dims = getBuildingDimensions(building.type);
+            const halfW = (dims.collisionWidth || 5) / 2;
+            const halfD = (dims.collisionDepth || 5) / 2;
 
             // Building bounds (AABB)
-            const minX = building.x - halfSize;
-            const maxX = building.x + halfSize;
-            const minZ = building.z - halfSize;
-            const maxZ = building.z + halfSize;
+            const minX = building.x - halfW;
+            const maxX = building.x + halfW;
+            const minZ = building.z - halfD;
+            const maxZ = building.z + halfD;
 
             // Expand bounds by unit radius
             const expandedMinX = minX - unitRadius;
@@ -914,16 +951,20 @@ class Game {
             const isGasExtractor = gasTypes.includes(building.type?.toLowerCase());
             if (isGasExtractor) continue;
 
-            const halfSize = (building.type === 'base' || building.type === 'hatchery') ? 3 : 2.5;
-            const expandedSize = halfSize + unitRadius;
+            const dims = getBuildingDimensions(building.type);
+            const halfW = (dims.collisionWidth || 5) / 2;
+            const halfD = (dims.collisionDepth || 5) / 2;
+
+            const expandedW = halfW + unitRadius;
+            const expandedD = halfD + unitRadius;
 
             // Building center
             const bx = building.x;
             const bz = building.z;
 
-            // Check if new position would be inside building
-            if (newX > bx - expandedSize && newX < bx + expandedSize &&
-                newZ > bz - expandedSize && newZ < bz + expandedSize) {
+            // Check if new position would be inside building (AABB check)
+            if (newX > bx - expandedW && newX < bx + expandedW &&
+                newZ > bz - expandedD && newZ < bz + expandedD) {
 
                 // Determine which way to steer around the building
                 // Use cross product to decide: if (dx, dz) x (bx-oldX, bz-oldZ) > 0, go right, else go left
@@ -961,20 +1002,20 @@ class Game {
 
                 // Make sure the slide position is outside the building
                 // Clamp to building edge
-                if (slideX > bx - expandedSize && slideX < bx + expandedSize &&
-                    slideZ > bz - expandedSize && slideZ < bz + expandedSize) {
+                if (slideX > bx - expandedW && slideX < bx + expandedW &&
+                    slideZ > bz - expandedD && slideZ < bz + expandedD) {
                     // Still inside, push to nearest edge
-                    const distToLeft = slideX - (bx - expandedSize);
-                    const distToRight = (bx + expandedSize) - slideX;
-                    const distToTop = slideZ - (bz - expandedSize);
-                    const distToBottom = (bz + expandedSize) - slideZ;
+                    const distToLeft = slideX - (bx - expandedW);
+                    const distToRight = (bx + expandedW) - slideX;
+                    const distToTop = slideZ - (bz - expandedD);
+                    const distToBottom = (bz + expandedD) - slideZ;
 
                     const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
 
-                    if (minDist === distToLeft) slideX = bx - expandedSize;
-                    else if (minDist === distToRight) slideX = bx + expandedSize;
-                    else if (minDist === distToTop) slideZ = bz - expandedSize;
-                    else slideZ = bz + expandedSize;
+                    if (minDist === distToLeft) slideX = bx - expandedW;
+                    else if (minDist === distToRight) slideX = bx + expandedW;
+                    else if (minDist === distToTop) slideZ = bz - expandedD;
+                    else slideZ = bz + expandedD;
                 }
 
                 return { x: slideX, z: slideZ };
@@ -1007,6 +1048,16 @@ class Game {
 
         // Render scene
         this.scene?.render();
+    }
+
+    toggleDebugMode() {
+        this.debugMode = !this.debugMode;
+        this.buildingRenderer?.setDebugMode(this.debugMode);
+        this.unitRenderer?.setDebugMode(this.debugMode);
+        this.hud?.showNotification({
+            message: `Debug Mode: ${this.debugMode ? 'ON' : 'OFF'}`,
+            type: 'info'
+        });
     }
 }
 

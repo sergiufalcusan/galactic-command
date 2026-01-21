@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { modelLoader } from './ModelLoader.js';
+import { getBuildingDimensions, normalizeBuildingType, BUILDING_DIMENSIONS } from '../game/BuildingConfig.js';
 
 // Faction-specific colors
 const FACTION_COLORS = {
@@ -21,14 +22,7 @@ const BUILDING_MODELS = {
     gasExtractor: '/models/buildings/gasextractor.glb'
 };
 
-// Model scales
-const BUILDING_SCALES = {
-    base: 3.5,
-    supply: 2.0,
-    barracks: 2.5,
-    factory: 2.8,
-    gasExtractor: 4.0
-};
+
 
 export class BuildingRenderer {
     constructor(scene, faction) {
@@ -36,9 +30,19 @@ export class BuildingRenderer {
         this.faction = faction;
         this.buildings = new Map();
         this.colors = FACTION_COLORS[faction.id] || FACTION_COLORS.human;
+        this.debugMode = false;
 
         // Preload building models
         this.preloadModels();
+    }
+
+    setDebugMode(enabled) {
+        this.debugMode = enabled;
+        this.buildings.forEach(group => {
+            if (group.userData.debugCollisionBox) {
+                group.userData.debugCollisionBox.visible = enabled;
+            }
+        });
     }
 
     async preloadModels() {
@@ -48,13 +52,18 @@ export class BuildingRenderer {
 
     createBuilding(buildingData) {
 
+        const dims = getBuildingDimensions(buildingData.type);
         const group = new THREE.Group();
         group.position.set(buildingData.x, 0.5, buildingData.z);
         group.userData.buildingData = buildingData;
 
         // Add invisible hitbox for click detection (covers entire building)
-        const hitboxSize = buildingData.type === 'base' ? 8 : 6;
+        const hitboxSize = dims.clickHitboxSize;
         const hitboxHeight = buildingData.type === 'base' ? 6 : 4;
+
+        // Initial fallback halfSize for collision before model loads
+        buildingData.halfSize = dims.collisionHalfSize;
+
         const hitboxGeometry = new THREE.BoxGeometry(hitboxSize, hitboxHeight, hitboxSize);
         const hitboxMaterial = new THREE.MeshBasicMaterial({
             visible: false // Invisible but still raycastable
@@ -63,6 +72,9 @@ export class BuildingRenderer {
         hitbox.position.y = hitboxHeight / 2; // Raise to cover building height
         hitbox.userData.buildingData = buildingData; // Copy userData for raycast detection
         group.add(hitbox);
+
+        // Add debug collision box (visible only in debug mode)
+        this.createDebugCollisionBox(group, buildingData.type);
 
         // Load the appropriate model asynchronously
         this.loadBuildingModel(group, buildingData.type);
@@ -88,7 +100,8 @@ export class BuildingRenderer {
 
     createSelectionRing(type) {
         // Different sizes for different building types
-        const ringSize = type === 'base' ? 4 : 2.5;
+        const canonicalType = normalizeBuildingType(type);
+        const ringSize = canonicalType === 'base' ? 4 : 2.5;
         const geometry = new THREE.RingGeometry(ringSize, ringSize + 0.3, 32);
         const material = new THREE.MeshBasicMaterial({
             color: 0x00ff00,
@@ -111,45 +124,35 @@ export class BuildingRenderer {
 
     async loadBuildingModel(group, type) {
         // Normalize building type
-        const typeMap = {
-            'base': 'base',
-            'hatchery': 'base',
-            'nexus': 'base',
-            'commandcenter': 'base',
-            'supply': 'supply',
-            'supplydepot': 'supply',
-            'pylon': 'supply',
-            'barracks': 'barracks',
-            'spawningpool': 'barracks',
-            'gateway': 'barracks',
-            'factory': 'factory',
-            'roachwarren': 'factory',
-            'roboticsfacility': 'factory',
-            'gasextractor': 'gasExtractor',
-            'extractor': 'gasExtractor',
-            'refinery': 'gasExtractor',
-            'assimilator': 'gasExtractor'
-        };
+        const canonicalType = normalizeBuildingType(type);
+        const dims = BUILDING_DIMENSIONS[canonicalType];
 
-        const normalizedType = typeMap[type.toLowerCase()] || type;
-        const modelPath = BUILDING_MODELS[normalizedType] || BUILDING_MODELS.base;
-        const scale = BUILDING_SCALES[normalizedType] || 2.0;
+        const modelPath = BUILDING_MODELS[canonicalType] || BUILDING_MODELS.base;
+        const scale = dims.visualScale;
 
         try {
             const model = await modelLoader.load(modelPath);
             model.scale.setScalar(scale);
             modelLoader.applyFactionColor(model, this.colors.primary);
 
-            // Center the model within the group so construction overlay aligns
+            // Dynamic measuring removed as per user request to use central config
+            // Centering the model based on its bounding box
             const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
+
             model.position.x -= center.x;
             model.position.z -= center.z;
 
             group.add(model);
+
+            // Update debug collision box if it exists
+            if (group.userData.debugCollisionBox) {
+                const debugBox = group.userData.debugCollisionBox;
+                // Dimensions are already set in createDebugCollisionBox based on config
+            }
         } catch (error) {
-            console.error(`[BuildingRenderer] Failed to load building model ${type} (normalized: ${normalizedType}):`, error);
-            group.add(this.createFallbackBuilding(normalizedType));
+            console.error(`[BuildingRenderer] Failed to load building model ${type} (canonical: ${canonicalType}):`, error);
+            group.add(this.createFallbackBuilding(canonicalType));
         }
     }
 
@@ -165,6 +168,28 @@ export class BuildingRenderer {
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.y = size / 2;
         return mesh;
+    }
+
+    createDebugCollisionBox(group, type) {
+        const dims = getBuildingDimensions(type);
+        const w = dims.collisionWidth || 5;
+        const h = dims.collisionHeight || 4;
+        const d = dims.collisionDepth || 5;
+
+        // Use slightly larger values for wireframe to avoid z-fighting with model if they overlap perfectly
+        const geometry = new THREE.BoxGeometry(w, h, d);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x00ff00,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.8
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.y = h / 2;
+        mesh.visible = this.debugMode;
+
+        group.add(mesh);
+        group.userData.debugCollisionBox = mesh;
     }
 
     createConstructionOverlay(data) {

@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { modelLoader } from './ModelLoader.js';
+import { getUnitConfig } from '../game/UnitConfig.js';
 
 // Faction-specific colors
 const FACTION_COLORS = {
@@ -27,15 +28,7 @@ const COMBAT_MODELS = {
     overlord: '/models/units/overlord.glb'
 };
 
-// Model scales (may need adjustment)
-const MODEL_SCALES = {
-    worker: 1.5,
-    marine: 1.5,
-    zergling: 1.5,
-    zealot: 1.5,
-    overlord: 1.8,
-    larva: 0.6
-};
+// Model scales are now managed in UnitConfig.js
 
 export class UnitRenderer {
     constructor(scene, faction) {
@@ -44,6 +37,7 @@ export class UnitRenderer {
         this.units = new Map();
         this.colors = FACTION_COLORS[faction.id] || FACTION_COLORS.human;
         this.modelsLoaded = false;
+        this.debugMode = false;
 
         // Preload models
         this.preloadModels();
@@ -59,14 +53,24 @@ export class UnitRenderer {
         this.modelsLoaded = true;
     }
 
+    setDebugMode(enabled) {
+        this.debugMode = enabled;
+        this.units.forEach(group => {
+            if (group.userData.debugCollisionBox) {
+                group.userData.debugCollisionBox.visible = enabled;
+            }
+        });
+    }
+
     async createWorker(unitData) {
+        const config = getUnitConfig('worker');
         const group = new THREE.Group();
 
         const modelPath = WORKER_MODELS[this.faction.id] || WORKER_MODELS.human;
 
         try {
             const model = await modelLoader.load(modelPath);
-            model.scale.setScalar(MODEL_SCALES.worker);
+            model.scale.setScalar(config.visualScale);
             modelLoader.applyFactionColor(model, this.colors.primary);
 
             // Center the model within the group to align with ring and hitbox
@@ -89,22 +93,26 @@ export class UnitRenderer {
         group.userData.cargoVisual = cargoGroup;
 
         // Add invisible selection hitbox (larger than model to make selection easier)
-        const hitboxGeometry = new THREE.CylinderGeometry(1.2, 1.2, 2.5, 8);
+        const hitboxGeometry = new THREE.CylinderGeometry(config.radius * 1.5, config.radius * 1.5, config.height, 8);
         const hitboxMaterial = new THREE.MeshBasicMaterial({
             visible: false,
             transparent: true,
             opacity: 0
         });
         const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
-        hitbox.position.y = 1.25;
+        hitbox.position.y = config.height / 2;
         hitbox.userData.unitData = unitData; // Essential for selection
         group.add(hitbox);
 
         // Add selection ring (hidden by default)
         const selectionRing = this.createSelectionRing();
+        selectionRing.scale.setScalar(config.radius / 0.8); // Scale relative to default ring size
         selectionRing.visible = false;
         group.add(selectionRing);
         group.userData.selectionRing = selectionRing;
+
+        // Add debug collision box
+        this.createDebugCollisionBox(group, config.radius, config.height);
 
         // Set position
         group.position.set(unitData.x, 0.5, unitData.z);
@@ -174,8 +182,9 @@ export class UnitRenderer {
 
     // Create a larva (worm) visual
     createLarva(unitData) {
+        const config = getUnitConfig('larva');
+        const scale = config.visualScale;
         const group = new THREE.Group();
-        const scale = MODEL_SCALES.larva;
 
         // Worm body - segmented appearance
         const segments = 5;
@@ -215,27 +224,29 @@ export class UnitRenderer {
         rightEye.position.set(scale * 0.3, 0.4, -scale * 0.2);
         group.add(rightEye);
 
-        // Add invisible selection hitbox
-        const hitboxGeometry = new THREE.CylinderGeometry(0.8, 0.8, 1, 8);
+        const hitboxGeometry = new THREE.CylinderGeometry(config.radius * 1.2, config.radius * 1.2, config.height, 8);
         const hitboxMaterial = new THREE.MeshBasicMaterial({
             visible: false,
             transparent: true,
             opacity: 0
         });
         const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
-        hitbox.position.y = 0.5;
+        hitbox.position.y = config.height / 2;
         hitbox.userData.unitData = unitData;
         group.add(hitbox);
 
         // Selection ring - higher position and bigger for larva
         const selectionRing = this.createSelectionRing();
+        selectionRing.scale.setScalar(config.radius / 0.8);
         selectionRing.visible = false;
-        selectionRing.scale.setScalar(1.0); // Normal size for visibility
         selectionRing.position.y = 0.15; // Raise above terrain
         selectionRing.material.depthTest = false; // Render on top of terrain
         selectionRing.renderOrder = 999; // Ensure it renders last
         group.add(selectionRing);
         group.userData.selectionRing = selectionRing;
+
+        // Add debug collision box
+        this.createDebugCollisionBox(group, config.radius, config.height);
 
         // Position
         group.position.set(unitData.x, 0, unitData.z);
@@ -306,22 +317,27 @@ export class UnitRenderer {
         }
 
         // Add invisible selection hitbox
-        const hitboxGeometry = new THREE.CylinderGeometry(1.5, 1.5, 3, 8);
+        const config = getUnitConfig('evolutionEgg');
+        const hitboxGeometry = new THREE.CylinderGeometry(config.radius * 1.2, config.radius * 1.2, config.height, 8);
         const hitboxMaterial = new THREE.MeshBasicMaterial({
             visible: false,
             transparent: true,
             opacity: 0
         });
         const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
-        hitbox.position.y = 1.5;
+        hitbox.position.y = config.height / 2;
         hitbox.userData.unitData = eggData;
         group.add(hitbox);
 
         // Selection ring
         const selectionRing = this.createSelectionRing();
+        selectionRing.scale.setScalar(config.radius / 0.8);
         selectionRing.visible = false;
         group.add(selectionRing);
         group.userData.selectionRing = selectionRing;
+
+        // Add debug collision box
+        this.createDebugCollisionBox(group, config.radius, config.height);
 
         // Position
         group.position.set(eggData.x, 0, eggData.z);
@@ -340,7 +356,8 @@ export class UnitRenderer {
 
         const unitType = unitData.type || 'marine';
         const modelPath = COMBAT_MODELS[unitType] || COMBAT_MODELS.marine;
-        const scale = MODEL_SCALES[unitType] || 0.8;
+        const config = getUnitConfig(unitType);
+        const scale = config.visualScale;
 
         try {
             const model = await modelLoader.load(modelPath);
@@ -360,22 +377,26 @@ export class UnitRenderer {
         }
 
         // Add invisible selection hitbox
-        const hitboxGeometry = new THREE.CylinderGeometry(1.5, 1.5, 3, 8);
+        const hitboxGeometry = new THREE.CylinderGeometry(config.radius * 1.5, config.radius * 1.5, config.height, 8);
         const hitboxMaterial = new THREE.MeshBasicMaterial({
             visible: false,
             transparent: true,
             opacity: 0
         });
         const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
-        hitbox.position.y = 1.5;
+        hitbox.position.y = config.height / 2;
         hitbox.userData.unitData = unitData;
         group.add(hitbox);
 
         // Selection ring
         const selectionRing = this.createSelectionRing();
+        selectionRing.scale.setScalar(config.radius / 0.8);
         selectionRing.visible = false;
         group.add(selectionRing);
         group.userData.selectionRing = selectionRing;
+
+        // Add debug collision box
+        this.createDebugCollisionBox(group, config.radius, config.height);
 
         group.position.set(unitData.x, 0.5, unitData.z);
         group.userData.unitData = unitData;
@@ -415,6 +436,22 @@ export class UnitRenderer {
         ring.rotation.x = -Math.PI / 2;
         ring.position.y = 0.05;
         return ring;
+    }
+
+    createDebugCollisionBox(group, radius, height) {
+        const geometry = new THREE.CylinderGeometry(radius, radius, height, 12);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xffff00, // Yellow for units
+            wireframe: true,
+            transparent: true,
+            opacity: 0.8
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.y = height / 2;
+        mesh.visible = this.debugMode;
+
+        group.add(mesh);
+        group.userData.debugCollisionBox = mesh;
     }
 
     setSelected(unitId, selected) {
@@ -469,13 +506,10 @@ export class UnitRenderer {
                 return; // Skip other animations for eggs
             }
 
-            // Larva wiggling and autonomous movement
+            // Larva wiggling animation (movement is now handled in main.js)
             if (group.userData.isLarva) {
                 const offset = group.userData.wiggleOffset || 0;
                 const wiggleTime = time * 6 + offset; // Fast wiggle
-
-                // Wiggle the whole group side to side (visible motion)
-                const wiggleAmount = Math.sin(wiggleTime) * 0.3;
 
                 // Wiggle each segment with wave motion
                 for (let i = 0; i < 5; i++) {
@@ -486,51 +520,12 @@ export class UnitRenderer {
                     }
                 }
 
-                // Initialize movement
-                if (!group.userData.larvaInitialized) {
-                    group.userData.larvaInitialized = true;
-                    group.userData.baseX = group.position.x;
-                    group.userData.baseZ = group.position.z;
-                    group.userData.wanderAngle = Math.random() * Math.PI * 2;
-                    group.userData.wanderTimer = 0;
-                }
-
-                // Constant movement
-                group.userData.wanderTimer += 0.016;
-
-                // Change direction frequently
-                if (group.userData.wanderTimer > 1.0) {
-                    group.userData.wanderAngle += (Math.random() - 0.5) * Math.PI * 1.5;
-                    group.userData.wanderTimer = 0;
-                }
-
-                // Movement speed
-                const moveSpeed = 1.0;
-                const dx = Math.cos(group.userData.wanderAngle) * moveSpeed * 0.016;
-                const dz = Math.sin(group.userData.wanderAngle) * moveSpeed * 0.016;
-                group.position.x += dx;
-                group.position.z += dz;
-
-                // Keep within area around spawn
-                const distFromBase = Math.sqrt(
-                    Math.pow(group.position.x - group.userData.baseX, 2) +
-                    Math.pow(group.position.z - group.userData.baseZ, 2)
-                );
-                if (distFromBase > 5) {
-                    group.userData.wanderAngle = Math.atan2(
-                        group.userData.baseZ - group.position.z,
-                        group.userData.baseX - group.position.x
-                    );
-                }
-
-                // Face movement direction with wiggle
-                group.rotation.y = group.userData.wanderAngle + wiggleAmount;
-
-                // Update unit data position
-                if (data) {
-                    data.x = group.position.x;
-                    data.z = group.position.z;
-                }
+                // Visual side-to-side wiggle for the whole larva 
+                // Note: rotation.y is updated by main.js to face movement, 
+                // we add the wiggle offset on top of it.
+                const baseRotation = group.userData.baseRotationY || 0;
+                const wiggleAmount = Math.sin(wiggleTime) * 0.3;
+                group.rotation.y = baseRotation + wiggleAmount;
 
                 return;
             }
