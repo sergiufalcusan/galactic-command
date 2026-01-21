@@ -28,6 +28,16 @@ export const UNIT_CONFIG = {
         height: 2.0,
         visualScale: 1.5
     },
+    marauder: {
+        radius: 1.0,
+        height: 2.5,
+        visualScale: 2.0
+    },
+    hellion: {
+        radius: 1.2,
+        height: 1.5,
+        visualScale: 12.5  // 5x larger
+    },
     zealot: {
         radius: 0.9,
         height: 2.2,

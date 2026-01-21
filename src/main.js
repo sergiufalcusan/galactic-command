@@ -816,24 +816,32 @@ class Game {
             let newX = unit.x;
             let newZ = unit.z;
 
-            // Unit-unit separation and collision
-            gameState.units.forEach((other, otherIndex) => {
-                if (index === otherIndex) return;
+            // Check if this unit is flying
+            const isFlying = config.flyHeight !== undefined;
 
-                const dx = unit.x - other.x;
-                const dz = unit.z - other.z;
-                const distSq = dx * dx + dz * dz;
-                const otherConfig = getUnitConfig(other.type);
-                const minSeparation = (unitRadius + otherConfig.radius) * 1.2;
+            // Unit-unit separation and collision (skip for flying units)
+            if (!isFlying) {
+                gameState.units.forEach((other, otherIndex) => {
+                    if (index === otherIndex) return;
 
-                if (distSq < minSeparation * minSeparation) {
-                    const dist = Math.sqrt(distSq);
-                    const pushForce = (minSeparation - dist) * separationForce;
-                    const angle = distSq > 0 ? Math.atan2(dz, dx) : Math.random() * Math.PI * 2;
-                    newX += Math.cos(angle) * pushForce * deltaTime;
-                    newZ += Math.sin(angle) * pushForce * deltaTime;
-                }
-            });
+                    // Skip collision with other flying units too
+                    const otherConfig = getUnitConfig(other.type);
+                    if (otherConfig.flyHeight !== undefined) return;
+
+                    const dx = unit.x - other.x;
+                    const dz = unit.z - other.z;
+                    const distSq = dx * dx + dz * dz;
+                    const minSeparation = (unitRadius + otherConfig.radius) * 1.2;
+
+                    if (distSq < minSeparation * minSeparation) {
+                        const dist = Math.sqrt(distSq);
+                        const pushForce = (minSeparation - dist) * separationForce;
+                        const angle = distSq > 0 ? Math.atan2(dz, dx) : Math.random() * Math.PI * 2;
+                        newX += Math.cos(angle) * pushForce * deltaTime;
+                        newZ += Math.sin(angle) * pushForce * deltaTime;
+                    }
+                });
+            }
 
             // Actual movement towards target
             if (targetX !== null && targetZ !== null) {
@@ -933,8 +941,11 @@ class Game {
             if (isGasExtractor) continue; // Skip collision for gas extractors
 
             const dims = getBuildingDimensions(building.type);
-            const halfW = (dims.collisionWidth || 5) / 2;
-            const halfD = (dims.collisionDepth || 5) / 2;
+
+            // Incomplete buildings have smaller collision box (40%) so workers can get close to build
+            const collisionScale = building.isComplete ? 1.0 : 0.4;
+            const halfW = ((dims.collisionWidth || 5) / 2) * collisionScale;
+            const halfD = ((dims.collisionDepth || 5) / 2) * collisionScale;
 
             // Building bounds (AABB)
             const minX = building.x - halfW;
@@ -987,8 +998,11 @@ class Game {
             if (isGasExtractor) continue;
 
             const dims = getBuildingDimensions(building.type);
-            const halfW = (dims.collisionWidth || 5) / 2;
-            const halfD = (dims.collisionDepth || 5) / 2;
+
+            // Incomplete buildings have smaller collision box (40%) so workers can get close to build
+            const collisionScale = building.isComplete ? 1.0 : 0.4;
+            const halfW = ((dims.collisionWidth || 5) / 2) * collisionScale;
+            const halfD = ((dims.collisionDepth || 5) / 2) * collisionScale;
 
             const expandedW = halfW + unitRadius;
             const expandedD = halfD + unitRadius;

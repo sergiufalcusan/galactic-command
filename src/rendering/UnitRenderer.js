@@ -22,7 +22,9 @@ const WORKER_MODELS = {
 
 // Combat unit models
 const COMBAT_MODELS = {
-    marine: '/models/units/marine.glb',
+    marine: '/models/units/marine.glb',        // astronautA from kenney_space
+    marauder: '/models/units/marauder.glb',    // turret_double from kenney_space
+    hellion: '/models/units/hellion.glb',      // rover from kenney_space
     zergling: '/models/units/zergling.glb',
     zealot: '/models/units/zealot.glb',
     overlord: '/models/units/overlord.glb'
