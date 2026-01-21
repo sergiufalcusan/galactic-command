@@ -70,6 +70,9 @@ export class HUD {
         this.populationDisplay.textContent = state.population;
         this.populationMaxDisplay.textContent = state.populationMax;
         this.gameTimer.textContent = state.gameTime;
+
+        // Update egg progress if an egg is selected
+        this.updateEggProgressDisplay();
     }
 
     updateResources(data) {
@@ -111,6 +114,7 @@ export class HUD {
         if (!entity) {
             this.selectedInfo.querySelector('.selected-name').textContent = 'Nothing selected';
             this.actionButtons.innerHTML = '';
+            this.selectedEggId = null; // Clear egg selection
             return;
         }
 
@@ -146,6 +150,9 @@ export class HUD {
 
     // Show evolution progress for a selected egg
     showEggProgress(egg) {
+        // Store selected egg ID for real-time updates
+        this.selectedEggId = egg.id;
+
         // Find the production queue item for this egg
         const queueItem = gameState.productionQueue.find(item =>
             item.isEvolution && item.eggId === egg.id
@@ -153,6 +160,7 @@ export class HUD {
 
         const evolveInfo = document.createElement('div');
         evolveInfo.className = 'egg-progress-info';
+        evolveInfo.id = 'egg-progress-display';
         evolveInfo.style.cssText = 'padding: 10px; text-align: center;';
 
         if (queueItem) {
@@ -162,9 +170,9 @@ export class HUD {
             evolveInfo.innerHTML = `
                 <div style="color: #8b00ff; font-weight: bold; margin-bottom: 8px;">🥚 Evolving to ${queueItem.name}</div>
                 <div style="background: #333; border-radius: 4px; height: 8px; margin: 8px 0; overflow: hidden;">
-                    <div style="background: linear-gradient(90deg, #8b00ff, #ff6600); height: 100%; width: ${progress * 100}%; transition: width 0.3s;"></div>
+                    <div id="egg-progress-bar" style="background: linear-gradient(90deg, #8b00ff, #ff6600); height: 100%; width: ${progress * 100}%; transition: width 0.2s;"></div>
                 </div>
-                <div style="color: #aaa; font-size: 0.9rem;">${timeRemaining}s remaining</div>
+                <div id="egg-time-remaining" style="color: #aaa; font-size: 0.9rem;">${timeRemaining}s remaining</div>
             `;
         } else {
             evolveInfo.innerHTML = `
@@ -173,6 +181,37 @@ export class HUD {
         }
 
         this.actionButtons.appendChild(evolveInfo);
+    }
+
+    // Update egg progress in real-time
+    updateEggProgressDisplay() {
+        if (!this.selectedEggId) return;
+
+        // Check if egg still exists
+        const egg = gameState.units.find(u => u.id === this.selectedEggId && u.type === 'egg');
+        if (!egg) {
+            this.selectedEggId = null;
+            return;
+        }
+
+        // Find the production queue item
+        const queueItem = gameState.productionQueue.find(item =>
+            item.isEvolution && item.eggId === this.selectedEggId
+        );
+
+        if (!queueItem) return;
+
+        // Update progress bar
+        const progressBar = document.getElementById('egg-progress-bar');
+        const timeDisplay = document.getElementById('egg-time-remaining');
+
+        if (progressBar && timeDisplay) {
+            const progress = queueItem.progress / queueItem.buildTime;
+            const timeRemaining = Math.max(0, Math.ceil(queueItem.buildTime - queueItem.progress));
+
+            progressBar.style.width = `${progress * 100}%`;
+            timeDisplay.textContent = `${timeRemaining}s remaining`;
+        }
     }
 
     // Show evolution options for selected larva (supports multi-selection)
@@ -250,11 +289,31 @@ export class HUD {
         evolutions.forEach(evo => {
             const cost = evo.config.cost;
             const costText = `${cost.minerals}m${cost.gas > 0 ? ` ${cost.gas}g` : ''}`;
+            const canAfford = gameState.canAfford(cost);
 
             const btn = document.createElement('button');
             btn.className = 'action-btn evolution-btn';
-            btn.innerHTML = evo.icon;
+            btn.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 60px; padding: 6px;';
+            btn.style.opacity = canAfford ? '1' : '0.5';
             btn.title = `Evolve to ${evo.config.name} (${costText})`;
+
+            // Create structured content with icon, name, and cost
+            const iconSpan = document.createElement('span');
+            iconSpan.style.fontSize = '1.5rem';
+            iconSpan.textContent = evo.icon;
+
+            const nameSpan = document.createElement('span');
+            nameSpan.style.cssText = 'font-size: 0.65rem; white-space: nowrap;';
+            nameSpan.textContent = evo.config.name;
+
+            const costSpan = document.createElement('span');
+            costSpan.style.cssText = 'font-size: 0.6rem; color: #aaa;';
+            costSpan.textContent = costText;
+
+            btn.appendChild(iconSpan);
+            btn.appendChild(nameSpan);
+            btn.appendChild(costSpan);
+
             btn.addEventListener('click', () => {
                 // Check affordability at CLICK time, not selection time
                 if (!gameState.canAfford(cost)) {
@@ -469,9 +528,12 @@ export class HUD {
             trainableUnits.forEach(unit => {
                 const cost = unit.data.cost;
                 const costText = `${cost.minerals}m${cost.gas > 0 ? ` ${cost.gas}g` : ''}`;
+                const canAfford = gameState.canAfford(cost);
                 this.addProductionButton(
                     unit.icon,
-                    `Train ${unit.data.name} (${costText})`,
+                    unit.data.name,
+                    costText,
+                    canAfford,
                     () => onTrainUnit(unit.key)
                 );
             });
@@ -487,11 +549,30 @@ export class HUD {
         this.updateProductionQueueDisplay();
     }
 
-    addProductionButton(icon, tooltip, onClick) {
+    addProductionButton(icon, name, costText, canAfford, onClick) {
         const btn = document.createElement('button');
         btn.className = 'action-btn production-btn';
-        btn.innerHTML = icon;
-        btn.title = tooltip;
+        btn.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 60px; padding: 6px;';
+        btn.style.opacity = canAfford ? '1' : '0.5';
+        btn.title = `Train ${name} (${costText})`;
+
+        // Create structured content with icon, name, and cost
+        const iconSpan = document.createElement('span');
+        iconSpan.style.fontSize = '1.5rem';
+        iconSpan.textContent = icon;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.style.cssText = 'font-size: 0.65rem; white-space: nowrap;';
+        nameSpan.textContent = name;
+
+        const costSpan = document.createElement('span');
+        costSpan.style.cssText = 'font-size: 0.6rem; color: #aaa;';
+        costSpan.textContent = costText;
+
+        btn.appendChild(iconSpan);
+        btn.appendChild(nameSpan);
+        btn.appendChild(costSpan);
+
         btn.addEventListener('click', onClick);
         this.actionButtons.appendChild(btn);
     }

@@ -847,13 +847,16 @@ class Game {
                     newX += (dx / dist) * force;
                     newZ += (dz / dist) * force;
 
-                    // Building collision check with navigation
-                    const navPos = this.checkBuildingCollisionWithNavigation(
-                        unit.x, unit.z, newX, newZ, unitRadius, dx / dist, dz / dist
-                    );
-                    if (navPos) {
-                        newX = navPos.x;
-                        newZ = navPos.z;
+                    // Building collision check with navigation (skip for flying units)
+                    const isFlying = config.flyHeight !== undefined;
+                    if (!isFlying) {
+                        const navPos = this.checkBuildingCollisionWithNavigation(
+                            unit.x, unit.z, newX, newZ, unitRadius, dx / dist, dz / dist
+                        );
+                        if (navPos) {
+                            newX = navPos.x;
+                            newZ = navPos.z;
+                        }
                     }
                 } else {
                     // Arrived at destination
@@ -878,21 +881,41 @@ class Game {
             // But only if we actually moved from separation
             if (unit.x !== newX || unit.z !== newZ) {
                 // Check building collision (simple push for separation/idle drift)
-                const collision = this.checkBuildingCollision(newX, newZ, unitRadius);
-                if (collision) {
-                    newX = collision.x;
-                    newZ = collision.z;
+                // Skip for flying units - they pass over buildings
+                const isFlying = config.flyHeight !== undefined;
+                if (!isFlying) {
+                    const collision = this.checkBuildingCollision(newX, newZ, unitRadius);
+                    if (collision) {
+                        newX = collision.x;
+                        newZ = collision.z;
+                    }
                 }
+
+                // Calculate movement direction BEFORE updating position
+                const moveDx = newX - unit.x;
+                const moveDz = newZ - unit.z;
+                const moveDist = Math.sqrt(moveDx * moveDx + moveDz * moveDz);
+
+                // Only update facing direction if we moved a meaningful amount
+                if (moveDist > 0.01) {
+                    const moveAngle = Math.atan2(moveDx, moveDz); // Note: atan2(dx, dz) for correct facing
+                    unit.facingAngle = moveAngle;
+
+                    // Update unit visual rotation
+                    const group = this.unitRenderer?.units?.get(unit.id);
+                    if (group) {
+                        // Store base rotation for renderer to use with animations (like wiggling)
+                        group.userData.baseRotationY = moveAngle;
+                        // Apply rotation directly for non-animated units
+                        if (!group.userData.isLarva) {
+                            group.rotation.y = moveAngle;
+                        }
+                    }
+                }
+
+                // Now update position
                 unit.x = newX;
                 unit.z = newZ;
-
-                // Update unit rotation based on movement direction
-                const group = this.unitRenderer?.units?.get(unit.id);
-                if (group) {
-                    const moveAngle = Math.atan2(newZ - unit.z, newX - unit.x);
-                    // Store base rotation for renderer to use with wiggling
-                    group.userData.baseRotationY = moveAngle;
-                }
 
                 this.unitRenderer?.updateUnitPosition(unit.id, unit.x, unit.z);
             }

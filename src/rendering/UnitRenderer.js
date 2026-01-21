@@ -398,8 +398,16 @@ export class UnitRenderer {
         // Add debug collision box
         this.createDebugCollisionBox(group, config.radius, config.height);
 
-        group.position.set(unitData.x, 0.5, unitData.z);
+        // Determine Y position - flying units use flyHeight
+        const yPosition = config.flyHeight || 0.5;
+        group.position.set(unitData.x, yPosition, unitData.z);
         group.userData.unitData = unitData;
+
+        // Mark flying units for animation
+        if (config.flyHeight) {
+            group.userData.isFlying = true;
+            group.userData.baseFlyHeight = config.flyHeight;
+        }
 
         this.scene.addObject(unitData.id, group);
         this.units.set(unitData.id, group);
@@ -530,14 +538,27 @@ export class UnitRenderer {
                 return;
             }
 
+            // Flying unit animation (Overlord, etc.) - gentle floating bob
+            if (group.userData.isFlying) {
+                const baseHeight = group.userData.baseFlyHeight || 8;
+                const bobAmount = Math.sin(time * 1.5 + group.position.x * 0.1) * 0.5;
+                group.position.y = baseHeight + bobAmount;
+
+                // Slight tilt based on movement
+                group.rotation.z = Math.sin(time * 0.8) * 0.05;
+                group.rotation.x = Math.cos(time * 0.6) * 0.03;
+                return;
+            }
+
             // Idle bobbing animation for Protoss
             if (this.faction.id === 'protoss') {
                 group.position.y = Math.sin(time * 2 + group.position.x) * 0.1;
             }
 
-            // Mining animation - gentle rotation
+            // Mining animation - gentle wiggle while facing resource
             if (data.state === 'mining' || data.state === 'harvesting_gas') {
-                group.rotation.y = Math.sin(time * 5) * 0.2;
+                const baseRotation = group.userData.baseRotationY || 0;
+                group.rotation.y = baseRotation + Math.sin(time * 5) * 0.15;
             }
 
             // Handle cargo visual for workers

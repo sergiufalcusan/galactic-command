@@ -34,9 +34,10 @@ export const UNIT_CONFIG = {
         visualScale: 1.5
     },
     overlord: {
-        radius: 2.0,
-        height: 3.0,
-        visualScale: 1.8
+        radius: 3.0,
+        height: 4.0,
+        visualScale: 10.0,
+        flyHeight: 8.0  // Fly above ground
     }
 };
 

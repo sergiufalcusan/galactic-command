@@ -574,7 +574,14 @@ class GameState {
             if (item.isPaused) return;
 
             // Determine the producer key (unique per building instance)
-            const producerKey = item.producerId || item.buildingId || item.producerType || 'default';
+            // Exception: Larva evolutions use their own unique eggId, allowing parallel evolution
+            let producerKey;
+            if (item.isEvolution && item.eggId) {
+                // Each evolving egg is its own "producer" - allows parallel evolutions
+                producerKey = `evolution_${item.eggId}`;
+            } else {
+                producerKey = item.producerId || item.buildingId || item.producerType || 'default';
+            }
 
             // Only the FIRST item for each producer should progress
             if (!activeByProducer.has(producerKey)) {
