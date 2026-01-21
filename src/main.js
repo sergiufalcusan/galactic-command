@@ -18,6 +18,7 @@ import FactionSelect from './ui/FactionSelect.js';
 import ChatInterface from './ui/ChatInterface.js';
 import HUD from './ui/HUD.js';
 import BuildingPlacementUI from './ui/BuildingPlacementUI.js';
+import Minimap from './ui/Minimap.js';
 
 class Game {
     constructor() {
@@ -33,6 +34,7 @@ class Game {
         this.factionSelect = null;
         this.chatInterface = null;
         this.hud = null;
+        this.minimap = null;
 
         // AI
         this.aiAgent = null;
@@ -196,6 +198,7 @@ class Game {
 
         if (this.inputHandler) this.inputHandler.dispose();
         if (this.hud) this.hud.dispose();
+        if (this.minimap) this.minimap.dispose();
         if (this.chatInterface) {
             try {
                 this.chatInterface.dispose();
@@ -313,6 +316,9 @@ class Game {
 
         // Create initial game objects
         this.createInitialGameObjects();
+
+        // Initialize minimap
+        this.minimap = new Minimap(this.scene);
 
         // Start game loop
         this.startGame();
@@ -448,6 +454,9 @@ class Game {
 
             // Recreate game objects from saved state
             this.recreateGameObjects();
+
+            // Initialize minimap
+            this.minimap = new Minimap(this.scene);
 
             // Start game loop
             this.startGame();
@@ -621,6 +630,9 @@ class Game {
 
         // Update HUD
         this.hud?.update();
+
+        // Update minimap
+        this.minimap?.update();
 
         // Update production queue display (for progress bars)
         this.hud?.updateProductionQueueDisplay();
