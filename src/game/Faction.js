@@ -277,19 +277,22 @@ export const FACTIONS = {
                 name: 'Pylon',
                 cost: { minerals: 100, gas: 0 },
                 buildTime: 25,
-                supplyProvided: 8
+                supplyProvided: 8,
+                powerFieldRadius: 12  // Pylon power field radius
             },
             barracks: {
                 name: 'Gateway',
                 cost: { minerals: 150, gas: 0 },
                 buildTime: 65,
-                unlocks: ['zealot', 'stalker']
+                unlocks: ['zealot', 'stalker'],
+                requiresPower: true  // Must be within Pylon power field
             },
             factory: {
                 name: 'Robotics Facility',
                 cost: { minerals: 200, gas: 100 },
                 buildTime: 65,
-                unlocks: ['immortal']
+                unlocks: ['immortal'],
+                requiresPower: true  // Must be within Pylon power field
             }
         },
         units: {

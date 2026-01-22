@@ -776,6 +776,10 @@ class Game {
                         targetX = unit.targetX;
                         targetZ = unit.targetZ;
                     }
+                } else if (unit.state === 'warping' && unit.warpData) {
+                    // Protoss probe moving to warp-in location
+                    targetX = unit.warpData.x;
+                    targetZ = unit.warpData.z;
                 }
             } else if (unit.type === 'larva') {
                 // Larva wandering logic
@@ -881,6 +885,13 @@ class Game {
                         }
                         // For Human, we stay in constructing state and standing still
                         // No further action needed here as checkHumanConstruction handles unpausing
+                    } else if (unit.state === 'warping' && unit.warpData) {
+                        // Protoss probe arrived - start warp-in and free the probe
+                        this.gameActions?.startProtossWarpIn(unit.warpData);
+                        unit.warpData = null;
+                        unit.state = 'idle';
+                        unit.targetX = undefined;
+                        unit.targetZ = undefined;
                     }
                 }
             }

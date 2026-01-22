@@ -237,13 +237,10 @@ export class UnitRenderer {
         hitbox.userData.unitData = unitData;
         group.add(hitbox);
 
-        // Selection ring - higher position and bigger for larva
+        // Selection ring
         const selectionRing = this.createSelectionRing();
         selectionRing.scale.setScalar(config.radius / 0.8);
         selectionRing.visible = false;
-        selectionRing.position.y = 0.15; // Raise above terrain
-        selectionRing.material.depthTest = false; // Render on top of terrain
-        selectionRing.renderOrder = 999; // Ensure it renders last
         group.add(selectionRing);
         group.userData.selectionRing = selectionRing;
 
@@ -440,11 +437,13 @@ export class UnitRenderer {
             color: 0x00ff00,
             transparent: true,
             opacity: 0.7,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            depthTest: false  // Always render on top of terrain
         });
         const ring = new THREE.Mesh(geometry, material);
         ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.05;
+        ring.position.y = 0.15;  // Raised higher above terrain
+        ring.renderOrder = 999;  // Render last to ensure visibility
         return ring;
     }
 

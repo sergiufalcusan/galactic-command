@@ -184,6 +184,14 @@ export class GameActions {
             }
         }
 
+        // Protoss power field check - buildings with requiresPower must be within a Pylon's field
+        if (faction.id === 'protoss' && buildingConfig.requiresPower) {
+            if (!this.isWithinPylonField(placement.x, placement.z)) {
+                result.message = 'Must be placed within a Pylon\'s power field';
+                return result;
+            }
+        }
+
         // Check resources
         if (!gameState.canAfford(buildingConfig.cost)) {
             result.message = `Not enough resources. Need ${buildingConfig.cost.minerals} minerals, ${buildingConfig.cost.gas} gas`;
@@ -318,6 +326,61 @@ export class GameActions {
             return result;
         }
 
+        // Special Protoss logic: Probe warps in buildings, then is free to leave
+        if (faction.id === 'protoss') {
+            // Use selected worker if provided, otherwise find one
+            let probe = null;
+            if (selectedWorkerId) {
+                const selectedUnit = gameState.units.find(u => u.id === selectedWorkerId);
+                if (selectedUnit && selectedUnit.type === 'worker') {
+                    probe = selectedUnit;
+                    // Remove from worker lists if present
+                    gameState.mineralWorkers = gameState.mineralWorkers.filter(id => id !== selectedWorkerId);
+                    gameState.gasWorkers = gameState.gasWorkers.filter(id => id !== selectedWorkerId);
+                }
+            }
+
+            // Fall back to auto-selection if no valid selected worker
+            if (!probe) {
+                probe = gameState.getIdleWorkers()[0];
+                if (!probe && gameState.mineralWorkers.length > 0) {
+                    // Take one from minerals
+                    const workerId = gameState.mineralWorkers.pop();
+                    probe = gameState.units.find(u => u.id === workerId);
+                }
+            }
+
+            if (!probe) {
+                result.message = 'No Probes available for construction';
+                return result;
+            }
+
+            // Clear previous orders
+            probe.targetResource = null;
+            probe.targetX = undefined;
+            probe.targetZ = undefined;
+
+            // Spend resources
+            gameState.spendResources(buildingConfig.cost);
+
+            // Assign probe to warp-in construction (probe travels to site, starts warp, then is freed)
+            probe.state = 'warping';
+            probe.warpData = {
+                type: buildingType,
+                name: buildingConfig.name,
+                x: placement.x,
+                z: placement.z,
+                buildTime: buildingConfig.buildTime,
+                supplyProvided: buildingConfig.supplyProvided || 0
+            };
+            probe.targetX = placement.x;
+            probe.targetZ = placement.z;
+
+            result.success = true;
+            result.message = `Probe moving to warp in ${buildingConfig.name}`;
+            return result;
+        }
+
         // Spend resources
         gameState.spendResources(buildingConfig.cost);
 
@@ -371,6 +434,32 @@ export class GameActions {
             name: constructionData.name,
             buildTime: constructionData.buildTime,
             supplyProvided: constructionData.supplyProvided || 0
+        });
+
+        if (this.onBuildingCreated) {
+            this.onBuildingCreated(building);
+        }
+    }
+
+    // Called when Protoss probe reaches the warp-in site
+    startProtossWarpIn(warpData) {
+        const building = gameState.addBuilding({
+            type: warpData.type,
+            name: warpData.name,
+            x: warpData.x,
+            z: warpData.z,
+            health: 100,
+            maxHealth: 100,
+            isComplete: false
+        });
+
+        gameState.addToProductionQueue({
+            category: 'building',
+            buildingId: building.id,
+            type: warpData.type,
+            name: warpData.name,
+            buildTime: warpData.buildTime,
+            supplyProvided: warpData.supplyProvided || 0
         });
 
         if (this.onBuildingCreated) {
@@ -623,6 +712,29 @@ export class GameActions {
         }
 
         return { valid: true };
+    }
+
+    // Check if a position is within any completed Pylon's power field (Protoss only)
+    isWithinPylonField(x, z) {
+        const faction = gameState.faction;
+        if (!faction || faction.id !== 'protoss') return true;
+
+        const pylonRadius = faction.buildings.supply?.powerFieldRadius || 8;
+        const pylons = gameState.buildings.filter(b =>
+            b.isComplete &&
+            (b.type?.toLowerCase() === 'pylon' || b.type?.toLowerCase() === 'supply')
+        );
+
+        for (const pylon of pylons) {
+            const dx = pylon.x - x;
+            const dz = pylon.z - z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+            if (distance <= pylonRadius) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

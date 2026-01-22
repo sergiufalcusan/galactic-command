@@ -80,9 +80,16 @@ export class InputHandler {
 
         // Handle building placement mode
         if (this.buildingPlacementMode) {
-            // Check if placement is valid (for Zerg creep restrictions)
+            // Check if placement is valid
             if (this.ghostBuilding && this.ghostBuilding.userData.isValidPlacement === false) {
-                this.showFeedback('Must build on creep!');
+                // Show appropriate error message based on faction
+                if (gameState.faction?.id === 'zerg') {
+                    this.showFeedback('Must build on creep!');
+                } else if (gameState.faction?.id === 'protoss') {
+                    this.showFeedback('Must be placed within a Pylon\'s power field!');
+                } else {
+                    this.showFeedback('Invalid placement!');
+                }
                 return;
             }
 
@@ -705,6 +712,19 @@ export class InputHandler {
                 }
             }
 
+            // Protoss power field check - buildings with requiresPower must be in a Pylon's field
+            if (gameState.faction?.id === 'protoss') {
+                const buildingConfig = gameState.faction.buildings?.[this.pendingBuildingType];
+                if (buildingConfig?.requiresPower) {
+                    isValidPlacement = this.isWithinPylonField(point.x, point.z);
+                }
+            }
+
+            // Check for building overlap - cannot build on top of other buildings
+            if (isValidPlacement) {
+                isValidPlacement = this.checkBuildingOverlap(point.x, point.z, this.pendingBuildingType);
+            }
+
             // Update ghost color based on validity
             if (this.ghostMaterial) {
                 this.ghostMaterial.color.setHex(isValidPlacement ? 0x00ff00 : 0xff0000);
@@ -713,6 +733,69 @@ export class InputHandler {
             // Store validity for click handling
             this.ghostBuilding.userData.isValidPlacement = isValidPlacement;
         }
+    }
+
+    // Check if a building position overlaps with existing buildings or resources
+    checkBuildingOverlap(x, z, buildingType) {
+        // Building sizes (radius from center)
+        const buildingSizes = {
+            'supply': 2,
+            'supplydepot': 2,
+            'pylon': 2,
+            'barracks': 3,
+            'spawningpool': 3,
+            'gateway': 3,
+            'factory': 3.5,
+            'roachwarren': 3.5,
+            'roboticsfacility': 3.5,
+            'base': 6,
+            'hatchery': 6,
+            'nexus': 6,
+            'commandcenter': 6
+        };
+
+        const normalizedType = buildingType.toLowerCase();
+        const newBuildingSize = buildingSizes[normalizedType] || 3;
+        const minDistance = 6; // Minimum distance between building centers
+
+        // Check against all existing buildings
+        for (const building of gameState.buildings) {
+            const existingSize = buildingSizes[building.type?.toLowerCase()] || 3;
+            const requiredDistance = Math.max(minDistance, newBuildingSize + existingSize);
+
+            const dx = building.x - x;
+            const dz = building.z - z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+
+            if (distance < requiredDistance) {
+                return false; // Too close to another building
+            }
+        }
+
+        // Check against resource nodes (minerals and gas) - except for gas extractors
+        const isGasExtractor = ['gasextractor', 'extractor', 'refinery', 'assimilator'].includes(normalizedType);
+
+        for (const patch of gameState.mineralPatches) {
+            const dx = patch.x - x;
+            const dz = patch.z - z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+            if (distance < 5) {
+                return false; // Too close to mineral patch
+            }
+        }
+
+        if (!isGasExtractor) {
+            for (const geyser of gameState.gasGeysers) {
+                const dx = geyser.x - x;
+                const dz = geyser.z - z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+                if (distance < 4) {
+                    return false; // Cannot build on gas geyser
+                }
+            }
+        }
+
+        return true; // Valid placement
     }
 
     getWorldPositionFromClick(event) {
@@ -728,6 +811,28 @@ export class InputHandler {
             return { x: intersects[0].point.x, z: intersects[0].point.z };
         }
         return null;
+    }
+
+    // Check if position is within any completed Pylon's power field (Protoss only)
+    isWithinPylonField(x, z) {
+        if (!gameState.faction || gameState.faction.id !== 'protoss') return true;
+
+        const pylonRadius = gameState.faction.buildings?.supply?.powerFieldRadius || 8;
+        const pylons = gameState.buildings.filter(b =>
+            b.isComplete &&
+            (b.type?.toLowerCase() === 'pylon' || b.type?.toLowerCase() === 'supply')
+        );
+
+        for (const pylon of pylons) {
+            const dx = pylon.x - x;
+            const dz = pylon.z - z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+            if (distance <= pylonRadius) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

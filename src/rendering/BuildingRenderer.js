@@ -92,6 +92,16 @@ export class BuildingRenderer {
             group.userData.constructionOverlay = overlay;
         }
 
+        // Add Pylon power field effect for Protoss
+        const normalizedType = buildingData.type?.toLowerCase();
+        if (this.faction.id === 'protoss' && (normalizedType === 'pylon' || normalizedType === 'supply')) {
+            const powerFieldRadius = this.faction.buildings?.supply?.powerFieldRadius || 8;
+            const powerField = this.createPowerFieldEffect(powerFieldRadius);
+            powerField.visible = buildingData.isComplete; // Only show when construction is complete
+            group.add(powerField);
+            group.userData.powerField = powerField;
+        }
+
         this.scene.addObject(buildingData.id, group);
         this.buildings.set(buildingData.id, group);
 
@@ -336,6 +346,11 @@ export class BuildingRenderer {
                     }
                 }
             });
+
+            // Show power field for completed Pylons
+            if (building.userData.powerField) {
+                building.userData.powerField.visible = true;
+            }
         } else {
             console.error('[BuildingRenderer] Could not complete construction - building or overlay not found');
         }
@@ -349,11 +364,41 @@ export class BuildingRenderer {
         }
     }
 
+    // Create Protoss Pylon power field visual effect
+    createPowerFieldEffect(radius) {
+        // Create a circular disc that shows the power field area
+        const geometry = new THREE.CircleGeometry(radius, 64);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xffcc00, // Protoss golden color
+            transparent: true,
+            opacity: 0.25,
+            side: THREE.DoubleSide,
+            depthWrite: false // Prevent z-fighting with ground
+        });
+        const disc = new THREE.Mesh(geometry, material);
+        disc.rotation.x = -Math.PI / 2; // Lay flat on ground
+        disc.position.y = 0.1; // Slightly above ground
+        disc.userData.isPowerField = true;
+        return disc;
+    }
+
     animateBuildings(time) {
         this.buildings.forEach((group, id) => {
             // Animate construction overlay rotation
             if (group.userData.constructionOverlay) {
                 group.userData.constructionOverlay.rotation.y = time;
+            }
+
+            // Animate Pylon power field
+            if (group.userData.powerField && group.userData.powerField.visible) {
+                const powerField = group.userData.powerField;
+                // Gentle pulsing opacity
+                const pulse = 0.25 + Math.sin(time * 2) * 0.1;
+                if (powerField.material) {
+                    powerField.material.opacity = pulse;
+                }
+                // Slow rotation
+                powerField.rotation.z = time * 0.1;
             }
         });
     }
